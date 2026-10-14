@@ -194,19 +194,73 @@ WITH (schema_lookup_policy = 'SCHEMA_ID');
 Modifies connection-level options on an existing catalog.
 
 ```sql
+-- set or replace options, optionally clearing others in the same statement
 ALTER [KAFKA | REDPANDA] CATALOG [IF EXISTS] [<schema>.]<catalog_name>
-  WITH ( <option> = <value> [, ...] )
-  [USING CATALOG <iceberg_catalog_name> | USING CATALOG NULL];
+  WITH ( <option> = <value> [, ...] ) [ RESET ( <option> [, ...] ) ];
+
+-- clear options only
+ALTER [KAFKA | REDPANDA] CATALOG [IF EXISTS] [<schema>.]<catalog_name>
+  RESET ( <option> [, ...] );
+
+-- attach, swap or detach the linked Iceberg catalog
+ALTER [KAFKA | REDPANDA] CATALOG [IF EXISTS] [<schema>.]<catalog_name>
+  USING CATALOG <iceberg_catalog_name> | USING CATALOG NULL
+  [ WITH ( <option> = <value> [, ...] ) ];
 ```
+
+These are separate forms: `RESET` combines only with a leading `WITH (...)`, never
+with `USING CATALOG`, and in the `USING CATALOG` form the optional `WITH (...)`
+comes **after** it.
 
 The `USING CATALOG` clause attaches or swaps the linked Iceberg catalog.
 `USING CATALOG NULL` detaches the linked Iceberg catalog (clears the link).
 Note: `DETACH` is not a SQL keyword; only `USING CATALOG NULL` is valid syntax.
 
+### `RESET (...)` — clear an option back to unset
+
+`WITH (...)` can only set or replace an option. `RESET (option, ...)` clears one,
+mirroring PostgreSQL's `ALTER TABLE ... RESET (storage_parameter)`. It can stand
+alone or follow `WITH (...)` in the same statement, and takes **bare option keys**
+— `RESET (truststore = 'x')` is a syntax error, as are an empty list `RESET ()`
+and a trailing comma.
+
+Rules enforced when the statement is applied:
+
+- **Required options cannot be reset.** `RESET (initial_brokers)` or
+  `RESET (schema_registry_url)` fails with `cannot RESET required option
+  <option>`.
+- **An option cannot be set and reset at once:** `WITH (truststore = '...')
+  RESET (truststore)` fails with `option truststore cannot be both set and reset
+  in the same statement`.
+- **An unknown key is rejected** with `unknown option <key>`, as in `WITH (...)`.
+- **SASL and the client keypair are single units.** Resetting any of
+  `sasl_mechanism`, `sasl_user` or `sasl_password` clears the whole SASL
+  configuration (and the credentials fanned out to the Pandaproxy client);
+  resetting either of `key_store_key` / `key_store_cert` clears the keypair.
+  Resetting `truststore` clears the CA material for the catalog, the schema
+  registry and Pandaproxy alike. Resetting an option that was never set does not
+  switch TLS or SASL on.
+
+### Empty-string option values are rejected
+
+A string **connection** option (the catalog-level options such as
+`initial_brokers`, `schema_registry_url` and `truststore`) set to `''` is refused
+at DDL time — `option <name> cannot be set to an empty string` — on both `CREATE`
+and `ALTER`, instead of storing a configuration that cannot connect. The
+exceptions are `sasl_user`, `sasl_password` and `rd_kafka_debug`, which still
+accept an empty string because deployment tooling sends them unconditionally. The
+per-table topic-binding options set with `CREATE TABLE ... WITH (...)` are not
+subject to this check, and an empty policy value there means the default.
+
 ```sql
 -- Update timeout
 ALTER KAFKA CATALOG my_kafka
 WITH (connection_timeout = 30000);
+
+-- Clear a previously set option (standalone, or alongside WITH (...))
+ALTER REDPANDA CATALOG my_kafka RESET (truststore, pandaproxy_url);
+ALTER REDPANDA CATALOG my_kafka
+WITH (initial_brokers = 'broker:9092') RESET (truststore);
 
 -- Link to an Iceberg catalog (enables transparent topic queries via Iceberg)
 ALTER KAFKA CATALOG my_kafka

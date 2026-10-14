@@ -47,18 +47,31 @@ DROP TABLE IF EXISTS orders;
 
 ## CREATE TABLE AS SELECT (CTAS)
 
-Materialize a query result as a new table. Grounded in `create_statement` (bison_parser.y):
+`CREATE TABLE ... AS SELECT` parses, but it is **not supported on native tables**:
+a target without a `catalog=>` name is refused with `CREATE TABLE AS SELECT is
+supported only on iceberg catalogs ("catalog=>namespace.table")`
+(`FeatureNotSupported`), with or without a column-name list. It is supported only
+against an Iceberg catalog (`CREATE TABLE cat=>ns.t AS SELECT ...`); see
+`/redpanda:sql-federated-queries`. A `catalog=>` target that names a
+Redpanda/Kafka catalog is refused in turn with `CREATE TABLE AS SELECT on catalog
+"<name>" is not supported; only iceberg catalogs accept it`. (`CREATE TABLE AS
+SELECT is not supported.` is a different refusal: that is what the
+`feature_flags.allow_table_operations` gate returns when it is off, before the
+target is examined at all.) `SELECT ... INTO` inside the body is rejected too
+(`SELECT ... INTO is not allowed in CREATE TABLE AS SELECT`).
+
+To materialize a query result as a native table, declare the table and then fill
+it with `INSERT INTO ... SELECT` (see [INSERT](#insert) below):
 
 ```sql
-CREATE TABLE orders_2024 AS
-    SELECT * FROM orders WHERE order_date >= DATE '2024-01-01';
+CREATE TABLE orders_slim (order_id BIGINT, customer TEXT, amount BIGINT);
 
-CREATE TABLE IF NOT EXISTS orders_backup AS SELECT * FROM orders;
-
--- Reshape: drop a column by selecting only the ones you want
-CREATE TABLE orders_slim AS
+INSERT INTO orders_slim
     SELECT order_id, customer, amount FROM orders;
 ```
+
+For a result you want kept up to date on demand, use a
+[materialized view](#create--refresh--drop-materialized-view) instead.
 
 ## TRUNCATE
 
@@ -134,16 +147,19 @@ Not supported — each is an error, not a silent no-op:
 | `DROP COLUMN` / `RENAME COLUMN` | syntax error — no such production |
 | `PRIMARY KEY` / `UNIQUE` column constraints | syntax error |
 | `ADD COLUMN c INT[][]` | `Multi-dimensional arrays are not supported` |
-| An external table (`ALTER TABLE cat=>t ADD COLUMN ...`) | `catalog=>table_name syntax is not supported in ALTER TABLE ... ADD COLUMN` |
+| A Kafka/Redpanda topic table (`ALTER TABLE kafka_cat=>t ADD COLUMN ...`) | refused: the `catalog=>` name form is handled by the Iceberg `ALTER TABLE` statement, which reports `ALTER TABLE is only supported on Iceberg tables, and "<catalog>" is not an Iceberg catalog` for a non-Iceberg catalog |
 | A view | `cannot alter relation "<view>": it is not a table` — `IF EXISTS` does **not** mask this, because a view is the wrong kind of relation rather than an absent one |
 | A `pg_catalog` table | `permission denied for table <table>` |
 | A column name already on the table | `column "<name>" of relation "<table>" already exists` |
 | An unknown type | `type "<name>" does not exist` |
 
-`ADD COLUMN` applies to **native tables only** — a Kafka/Redpanda topic table or
-an Iceberg table is refused by the same check as a view, since neither is a
-native user table. Their columns follow the registered schema; re-bind them with
-the `WITH (...)` form below instead.
+This `ADD COLUMN` form applies to **native tables only** (a plain `table` or
+`schema.table` name). A Kafka/Redpanda topic table is refused: its columns follow
+the registered schema, so re-bind it with the `WITH (...)` form below instead. A
+table on an **Iceberg** catalog is written with the `catalog=>ns.table` name and
+takes a separate `ALTER TABLE` statement, which has its own `ADD COLUMN`
+(nullable only, with optional position) alongside the other schema-evolution
+actions; see `/redpanda:sql-federated-queries`.
 
 A view stored as `SELECT *` over the altered table currently becomes invalid,
 because its stored column list no longer matches what its body produces
@@ -175,15 +191,25 @@ See [kafka-iceberg.md](kafka-iceberg.md) for the full Redpanda/Kafka and Iceberg
 catalog integration (an Oxla + Redpanda Enterprise differentiator), including all
 connection-option keys.
 
-For a column change `ADD COLUMN` cannot express — dropping or renaming a column,
-changing a column's type, or adding a column with a backfilled value — recreate
-the table with `CREATE TABLE AS SELECT`:
+For a column change `ADD COLUMN` cannot express on a **native** table — dropping
+or renaming a column, changing a column's type, or adding a column with a
+backfilled value — create a new table with the shape you want and copy the rows
+across with `INSERT INTO ... SELECT` (native `CREATE TABLE AS SELECT` is not
+supported; see [CTAS](#create-table-as-select-ctas)):
 
 ```sql
 -- Add a column with a computed value for existing rows
-CREATE TABLE orders_new AS
-    SELECT *, amount * 0.1 AS discount FROM orders;
+CREATE TABLE orders_new (order_id BIGINT, customer VARCHAR, amount BIGINT, discount DOUBLE);
+
+INSERT INTO orders_new
+    SELECT order_id, customer, amount, amount * 0.1 FROM orders;
 ```
+
+A table on an **Iceberg** catalog (`catalog=>ns.table`) is not limited this way:
+it takes the Iceberg schema-evolution forms of `ALTER TABLE` — `DROP COLUMN`,
+`RENAME COLUMN`, `ALTER COLUMN ... TYPE`, `SET`/`UNSET TBLPROPERTIES`,
+partition-field changes and `WRITE ORDERED BY`, one action per statement. For
+those, see `/redpanda:sql-federated-queries`.
 
 ## CREATE / DROP VIEW
 
@@ -229,11 +255,23 @@ Semantics to know:
   what moved: `expected N columns, got M`, `column i is named "x", expected "y"`,
   or `column "x" changed type`. A view whose body is a set operation stores no
   columns and carries no contract.
-- **Privileges are invoker-based**, unlike PostgreSQL (which runs a body as the
-  view's owner). The body is inlined before privilege checks, so the caller needs
-  `SELECT` on the view *and* on every relation the body reads — otherwise
-  `permission denied for table <base_table>`. `ALTER TABLE <view> OWNER TO <role>`
-  reassigns a view's owner (a view is a relation for that statement).
+- **Privileges are owner-based**, matching PostgreSQL's default
+  (`security_invoker = false`): reading a view needs `SELECT` on the view
+  **alone**. Every relation the body reads is checked against the role that
+  *owns* the view, and a nested view's body against its own owner — which is what
+  makes a view usable as a grant surface, since an owner can expose a slice of a
+  table to a role that cannot read that table at all. `ALTER TABLE <view> OWNER
+  TO <role>` reassigns a view's owner (a view is a relation for that statement)
+  and moves the privilege boundary with it: the owner is resolved when the body
+  is inlined, not pinned at `CREATE`. There is no `security_invoker` opt-out —
+  the grammar has no `WITH (...)` on `CREATE VIEW` and no `ALTER VIEW`.
+- **The body resolves in the creator's context.** The creator's search path and
+  database are captured at `CREATE` and stamped onto every use of the body, so an
+  unqualified name in a definition cannot be redirected by whatever `search_path`
+  the caller happens to have set.
+- **A definition over a relation the creator cannot read is refused** at `CREATE`
+  time — stricter than PostgreSQL, which stores such a definition and fails every
+  read of the resulting view instead.
 - **Dependencies are RESTRICT.** Dropping a table or view another view reads is
   refused with `dependent objects still exist` (SQLSTATE `2BP01`); drop the
   dependent view first.
@@ -246,13 +284,75 @@ Semantics to know:
   supported` (`FeatureNotSupported`); alias the columns inside the body instead
   (`SELECT id AS x, name AS y`). A body that is not a `SELECT` is rejected too
   (`view definition must be a SELECT query`). There is no `CREATE OR REPLACE
-  VIEW` (the parser has no `OR REPLACE` production) and no materialized views
-  (no `MATERIALIZED` keyword in the grammar) — drop and recreate instead.
+  VIEW` (the parser has no `OR REPLACE` production) — drop and recreate instead.
+  Materialized views are a statement family of their own rather than an option on
+  `CREATE VIEW`; see [CREATE / REFRESH / DROP MATERIALIZED
+  VIEW](#create--refresh--drop-materialized-view).
 - **Introspection.** A view shows up in `pg_class` with `relkind = 'v'`, its
   columns in `pg_attribute`, and its stored definition in
   `pg_catalog.pg_views` (`schemaname`, `viewname`, `viewowner`, `definition`).
   Unlike PostgreSQL, `definition` is the body text as written, not a reprint from
-  the parse tree.
+  the parse tree. A materialized view is **excluded** from `pg_views` and shows
+  `relkind = 'm'` in `pg_class`.
+
+---
+
+## CREATE / REFRESH / DROP MATERIALIZED VIEW
+
+A materialized view stores its result instead of only its text. `CREATE
+MATERIALIZED VIEW` populates it as part of the statement, `REFRESH MATERIALIZED
+VIEW` rebuilds the whole stored result, and `DROP MATERIALIZED VIEW` removes the
+view together with its backing storage.
+
+```sql
+CREATE MATERIALIZED VIEW regional_summary AS
+    SELECT region, COUNT(*) AS cnt, SUM(amount) AS total
+    FROM orders
+    GROUP BY region;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS regional_summary AS
+    SELECT region, COUNT(*) AS cnt FROM orders GROUP BY region;
+
+REFRESH MATERIALIZED VIEW regional_summary;
+
+DROP MATERIALIZED VIEW regional_summary;
+DROP MATERIALIZED VIEW IF EXISTS regional_summary;
+```
+
+Semantics to know:
+
+- **Gated by `feature_flags.allow_table_operations`**, the same cluster gate as
+  `CREATE TABLE` and `INSERT`. With the gate off, each statement is refused as
+  `CREATE MATERIALIZED VIEW is not supported.` / `REFRESH MATERIALIZED VIEW is
+  not supported.` / `DROP MATERIALIZED VIEW is not supported.`
+  (`FeatureNotSupported`).
+- **Native tables only.** A target on an external catalog
+  (`CREATE MATERIALIZED VIEW cat=>ns.mv ...`, and likewise `REFRESH`/`DROP`) is
+  rejected with `materialized views on external catalogs are not supported yet`.
+- **The base form is the whole grammar:** `CREATE MATERIALIZED VIEW [IF NOT
+  EXISTS] <name> AS <select>`. There is no column-alias list and no `WITH (...)`
+  clause, so there is no refresh interval — the stored result is rebuilt only by
+  an explicit `REFRESH MATERIALIZED VIEW` — and no `WITH NO DATA`: a create
+  always populates.
+- **Create and refresh are atomic.** A failed population rolls the `CREATE` back
+  and leaves nothing behind; a failed `REFRESH` keeps the previous stored result.
+  Two concurrent refreshes of the same view are designed to conflict at commit,
+  with the loser rejected rather than queued — expected behavior, not one this
+  skill has exercised, so retry a rejected `REFRESH`.
+- **Reading one re-executes its definition** at this version: a `SELECT` from a
+  materialized view inlines the stored body, as a plain view does. `REFRESH` is
+  what maintains the stored result.
+- **Wrong object kind is reported, not ignored:** `DROP VIEW` on a materialized
+  view fails with `"<name>" is not a view`. `DROP MATERIALIZED VIEW` on a plain
+  view or a table fails with `"<name>" is not a materialized view`.
+  `REFRESH MATERIALIZED VIEW` on a plain view fails with `"<name>" is not a table
+  or materialized view` — a different message from `DROP`'s.
+- **Introspection.** `pg_class` carries the view with `relkind = 'm'` (`'v'` for
+  a plain view); `pg_catalog.pg_views` lists plain views only and there is no
+  `pg_matviews`. The backing storage lives in the internal `oxla_internal`
+  schema, which is not part of the user-facing surface.
+- **Privileges** follow plain views: reading needs `SELECT` on the view, and the
+  body is checked against the view's owner.
 
 ---
 
@@ -819,7 +919,7 @@ FROM tb
 WHERE b0;
 ```
 
-For materializing query results as a permanent table, prefer `CREATE TABLE AS SELECT` (CTAS) — it is the idiomatic form and explicitly names the table.
+To materialize query results as a permanent native table, declare the table and `INSERT INTO ... SELECT` into it; native `CREATE TABLE AS SELECT` is not supported (see [CTAS](#create-table-as-select-ctas)).
 
 ---
 
