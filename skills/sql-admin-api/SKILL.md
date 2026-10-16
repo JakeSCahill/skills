@@ -22,6 +22,11 @@ Clients connect to Oxla via the PostgreSQL wire protocol on port 5432. SQL-level
 
 ## Quickstart
 
+> **No public image.** Redpanda SQL is offered through BYOC and the Agentic Data Plane, and there is
+> no publicly pullable container image for running it yourself. The Docker examples in this skill
+> illustrate the engine's runtime configuration with a `<redpanda-sql-image>` placeholder; they
+> are not steps for a BYOC or Agentic Data Plane cluster.
+
 ### Single-node via Docker (minimal config)
 
 ```bash
@@ -33,7 +38,7 @@ docker run --rm -it \
   -e OXLA__LEADER_ELECTION__LEADER_NAME=oxla_node_1 \
   -e OXLA__STORAGE__OXLA_HOME=/oxla/data \
   -e OXLA__LOGGING__LEVEL=INFO \
-  778696301129.dkr.ecr.eu-central-1.amazonaws.com/oxla-devel:latest
+  <redpanda-sql-image>
 ```
 
 ### Single-node with S3 storage
@@ -47,23 +52,12 @@ docker run --rm -it \
   -e AWS_DEFAULT_REGION=us-east-1 \
   -e AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
   -e AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
-  778696301129.dkr.ecr.eu-central-1.amazonaws.com/oxla-devel:latest
+  <redpanda-sql-image>
 ```
 
 ### Three-node cluster (Docker Compose)
 
-```bash
-# The reference three-node compose requires AWS credentials (uses `?err` substitution).
-# Export them before running:
-export AWS_DEFAULT_REGION=us-east-1
-export AWS_ACCESS_KEY_ID=<key>
-export AWS_SECRET_ACCESS_KEY=<secret>
-
-docker compose \
-  -f tests/blackbox/configurations/three_nodes.yml \
-  -f tests/blackbox/configurations/three_nodes_ports.yml \
-  up
-```
+See the three-node Compose example in [cluster-and-deploy.md](references/cluster-and-deploy.md#multi-node-docker-compose).
 
 ### Override a config value via env var
 
@@ -82,7 +76,7 @@ docker run ... -e OXLA__LOGGING__LEVEL=DEBUG ...
 docker run --rm -it \
   -p 5432:5432 \
   -v /path/to/config:/oxla/startup_config \
-  778696301129.dkr.ecr.eu-central-1.amazonaws.com/oxla-devel:latest
+  <redpanda-sql-image>
 ```
 
 ### Health check and log-level management via the admin API
@@ -205,7 +199,7 @@ Oxla's differentiators in its analytical-database domain are configured through 
 ## Reference Directory
 
 - [configuration.md](references/configuration.md): The YAML config file section by section — network ports, heartbeat, leader election, storage backends, metrics, access control, memory, SSL, OIDC, logging. The OXLA__ env-var override scheme and the public vs internal parameter classification.
-- [cluster-and-deploy.md](references/cluster-and-deploy.md): Cluster topology (cluster_name, host_name, leader vs worker nodes, inter-node ports), single-node and multi-node Docker Compose deployment patterns, environment-variable wiring from the reference configurations, and the Ansible playbooks (`ansible/devcluster_deploy.yml`, `ansible/devcluster_deploy_aws.yml`) and Terraform module (`terraform/devcluster/`) for deploying to real servers and EC2.
+- [cluster-and-deploy.md](references/cluster-and-deploy.md): Cluster topology (cluster_name, host_name, leader vs worker nodes, inter-node ports), single-node and multi-node Docker Compose deployment patterns, and environment-variable wiring.
 - [admin-grpc-and-runtime.md](references/admin-grpc-and-runtime.md): The ConnectRPC admin server on port 9090 — LoggingService (GetLogLevel/SetLogLevel), the /healthz endpoint, TLS/mTLS for the admin API, the Prometheus metrics endpoint on port 8080, and memory/OOM controls.
 - [lakehouse-and-streaming.md](references/lakehouse-and-streaming.md): Oxla's lakehouse and streaming integration surfaces — object-storage connections (`CREATE STORAGE TYPE S3/GCS/ABS` with full per-type option keys), Apache Iceberg REST catalogs (`CREATE ICEBERG CATALOG` with oauth2/basic/aws_sigv4 auth, TLS options, and the scope of the `feature_flags.allow_iceberg_queries` gate), and transparent Redpanda/Kafka integration (`CREATE REDPANDA/KAFKA CATALOG`, topic-backed tables, `schema_lookup_policy`/`error_handling_policy`/`struct_mapping_policy`/`confluent_wire_protocol`, and the `USING CATALOG` Iceberg link). All option keys grounded in `src/sqlparser` and `src/catalog`. No separate license key required.
 - [auth-and-security.md](references/auth-and-security.md): Authentication and security — access-control modes (`access_control.mode`), SCRAM-SHA-256 passwords, OIDC/JWT bearer auth (all `oidc.*` keys), centralized access control (`feature_flags.centralized_access_control.*`), and AES-256-GCM at-rest encryption of connection secrets via `OXLA_ENCRYPTION_KEY` (hex, ≤64 chars, cycled to a 256-bit key).
