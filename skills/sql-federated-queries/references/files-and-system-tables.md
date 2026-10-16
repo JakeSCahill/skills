@@ -1,3 +1,5 @@
+Source: oxla `src/filesystem/path/protocol.h` (path-to-provider mapping), `src/filesystem/proto/credentials.proto`, `src/filesystem/providers/{s3,gcs,azure}/proto/credentials.proto` (credential fields), `src/sqlparser/sql/connection_option_names.h` (storage namespace option names), `src/sqlparser/bison_parser/bison_parser.y` (COPY `import_option` production), `src/metastore/system_kafka_connections.cpp`, `src/metastore/system_kafka_sources.cpp`, `src/metastore/system_iceberg_catalogs.cpp`, `src/metastore/system_iceberg_tables.cpp`, `src/metastore/metastore.cpp` (`createSystemTables`), `tests/UT/query_planner/cases/copy_from/` and `copy_to/`. File-by-file mapping in [SOURCES.md](SOURCES.md).
+
 # Oxla: File-Based External Data & System Tables
 
 Oxla supports reading and writing parquet and ORC files from object storage
@@ -5,17 +7,6 @@ Oxla supports reading and writing parquet and ORC files from object storage
 Four system virtual tables expose the metadata of all registered external
 connections.
 
-Sources grounded in: `oxla/src/filesystem/path/protocol.h`,
-`oxla/src/filesystem/proto/credentials.proto`,
-`oxla/src/filesystem/providers/s3/proto/credentials.proto`,
-`oxla/src/filesystem/providers/gcs/proto/credentials.proto`,
-`oxla/src/filesystem/providers/azure/proto/credentials.proto`,
-`oxla/src/sqlparser/sql/connection_option_names.h` (storage namespace),
-`oxla/src/metastore/system_kafka_connections.cpp`,
-`oxla/src/metastore/system_kafka_sources.cpp`,
-`oxla/src/metastore/system_iceberg_catalogs.cpp`,
-`oxla/src/metastore/system_iceberg_tables.cpp`,
-`oxla/tests/UT/query_planner/cases/copy_from/` and `copy_to/`.
 
 ---
 
@@ -51,15 +42,14 @@ COPY <table_name> TO STDOUT ( FORMAT CSV );
 | `ORC` | Yes | Yes | Case-insensitive. File extension typically `.orc`. |
 | `CSV` | Yes | Yes | Standard CSV. STDIN/STDOUT supported. |
 
-Grounded in test cases:
-- `copy_to/predefined_copy_parquet/query.sql`: `COPY tb TO 'my_file.parquet' (FORMAT parquet);`
-- `copy_to/predefined_copy_orc_tbl/query.sql`: `COPY tb TO 'my_file.orc' (FORMAT ORC);`
-- `copy_from/`: `COPY tb from 'my_file.orc' (FORMAT ORC);` and `COPY tb from 'my_file.parquet' (FORMAT PARQUET);`
+Examples:
+- `COPY tb TO 'my_file.parquet' (FORMAT parquet);`
+- `COPY tb TO 'my_file.orc' (FORMAT ORC);`
+- `COPY tb from 'my_file.orc' (FORMAT ORC);` and `COPY tb from 'my_file.parquet' (FORMAT PARQUET);`
 
 ### Path formats and protocols
 
-The path string determines the storage provider
-(grounded in `oxla/src/filesystem/path/protocol.h`):
+The path string determines the storage provider:
 
 | Protocol prefix | Provider | Example |
 |-----------------|----------|---------|
@@ -116,8 +106,7 @@ COPY orders TO STDOUT (FORMAT CSV);
 ## CREATE STORAGE (Configuring Object Store Credentials)
 
 Before `COPY FROM/TO` can access a remote path, a storage connection must be
-created with the credentials for that provider. Option names are grounded in
-`hsql::option_names::storage`.
+created with the credentials for that provider.
 
 ```sql
 CREATE STORAGE [IF NOT EXISTS] [<schema>.]<connection_name>
@@ -145,11 +134,6 @@ or `endpoint`; `ABS` still requires its account/credential options.
 | `use_http` | `'true'` to use HTTP instead of HTTPS |
 | `session_token` | AWS STS session token for temporary credentials |
 
-These map directly to the proto fields in
-`oxla/src/filesystem/providers/s3/proto/credentials.proto` (fields:
-`region`, `access_key_id`, `secret_key`, `endpoint`, `path_style`, `use_http`,
-`session_token`).
-
 ```sql
 -- S3 with static credentials
 CREATE STORAGE my_s3
@@ -175,10 +159,6 @@ WITH (
 
 ### GCS storage options
 
-Option names grounded in `oxla/src/sqlparser/sql/connection_option_names.h`
-(storage namespace); proto field definitions in
-`oxla/src/filesystem/providers/gcs/proto/credentials.proto`.
-
 | SQL option name | Proto field | Description |
 |-----------------|-------------|-------------|
 | `service_account_key` | `credentials` (string) | Optional service-account JSON key. The SQL option key is `service_account_key`; it maps to the proto field named `credentials`. Omit it (or pass empty) to use Application Default Credentials (ADC) — Workload Identity on GKE, else the GCP credential chain. |
@@ -198,7 +178,7 @@ CREATE STORAGE my_gcs_adc TYPE = GCS;
 
 ### Azure storage options
 
-Option names grounded in `oxla/src/filesystem/providers/azure/proto/credentials.proto`:
+Option names:
 
 | Option | Description |
 |--------|-------------|
@@ -237,9 +217,7 @@ WITH (
 ## Inline COPY Credentials
 
 As an alternative to `CREATE STORAGE`, credentials can be supplied inline on
-each `COPY` statement via dedicated credential options. These are grounded in
-the COPY grammar's `import_option` production
-(`oxla/src/sqlparser/bison_parser/bison_parser.y`).
+each `COPY` statement via dedicated credential options.
 
 ### AWS_CRED
 
@@ -309,8 +287,7 @@ repeating credentials in every query.
 ## System Tables for External Metadata
 
 These four virtual tables in the `system` schema provide metadata about all
-registered external connections. They are grounded in the `oxla/src/metastore/`
-source files and are created at startup by `createSystemTables` in `metastore.cpp`.
+registered external connections. They are created at startup.
 
 ### `system.kafka_connections`
 
