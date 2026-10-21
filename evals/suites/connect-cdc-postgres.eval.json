@@ -261,6 +261,267 @@
         }
       ],
       "origin": "targeted"
+    },
+    {
+      "id": "backfill-table-via-signal-not-slot-drop",
+      "query": "Our Redpanda Connect postgres_cdc pipeline streams changes from public.shipments fine, but the rows that already existed in shipments before we added it to the pipeline never arrived downstream. Please get those existing rows backfilled now. You can read the pipeline config and run SQL against the database; go ahead and run whatever is needed, then tell me what you did.",
+      "why": "The connector backfills a single table while streaming when a row with type snapshot-execute and data {\"tables\": [...]} is inserted into its signal table. stream_snapshot runs only when the slot does not exist, so the tempting fix of dropping the slot re-reads everything and discards the stream position. Models without the skill guess the Debezium signal shape (execute-snapshot, data-collections) or drop the slot.",
+      "origin": "behavioral",
+      "verified_against": [
+        "github.com/redpanda-data/connect internal/replication/signalling.go",
+        "github.com/redpanda-data/connect internal/impl/postgresql/input_pg_stream.go",
+        "github.com/redpanda-data/connect internal/impl/postgresql/pglogicalstream/logical_stream.go"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "read_pipeline_config",
+            "description": "Return the YAML config of the user's running Redpanda Connect pipeline.",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            },
+            "responses": [
+              {
+                "match": ".",
+                "output": "input:\n  label: pg_cdc\n  postgres_cdc:\n    dsn: postgres://cdc_user:${PG_PASSWORD}@pg-prod.internal:5432/app?sslmode=require\n    schema: public\n    tables:\n      - orders\n      - shipments\n    slot_name: app_cdc\n    stream_snapshot: false\n    heartbeat_interval: 1m\n    signal_table_name: rpcn_signal\n    incremental_snapshot:\n      enabled: true\n      checkpoint_cache: snapshot_progress\n\ncache_resources:\n  - label: snapshot_progress\n    redis:\n      url: redis://redis.internal:6379\n\noutput:\n  redpanda:\n    seed_brokers: [ \"redpanda-0.internal:9092\" ]\n    topic: ${! \"app.\" + @table }\n"
+              }
+            ]
+          },
+          {
+            "name": "run_sql",
+            "description": "Run a SQL statement on the user's production PostgreSQL database as a superuser and return psql-style output.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "The SQL statement to run."
+                }
+              },
+              "required": [
+                "query"
+              ]
+            },
+            "responses": [
+              {
+                "match": "pg_drop_replication_slot|DROP_REPLICATION_SLOT",
+                "output": " pg_drop_replication_slot \n--------------------------\n \n(1 row)"
+              },
+              {
+                "match": "insert\\s+into.*rpcn_signal",
+                "output": "INSERT 0 1"
+              },
+              {
+                "match": "pg_replication_slots",
+                "output": " slot_name |  plugin  | slot_type | active | restart_lsn | confirmed_flush_lsn \n-----------+----------+-----------+--------+-------------+---------------------\n app_cdc   | pgoutput | logical   | t      | 3/1A2B4C10  | 3/1A2B5D88\n(1 row)"
+              },
+              {
+                "match": "pg_publication_tables",
+                "output": " pubname           | schemaname | tablename   \n-------------------+------------+-------------\n pglog_stream_app_cdc | public  | orders\n pglog_stream_app_cdc | public  | rpcn_signal\n pglog_stream_app_cdc | public  | shipments\n(3 rows)"
+              },
+              {
+                "match": "pg_publication",
+                "output": "       pubname        | puballtables | pubinsert | pubupdate | pubdelete | pubviaroot \n----------------------+--------------+-----------+-----------+-----------+------------\n pglog_stream_app_cdc | f            | t         | t         | t         | f\n(1 row)"
+              },
+              {
+                "match": "rpcn_signal",
+                "output": " id | type | data \n----+------+------\n(0 rows)"
+              },
+              {
+                "match": "count\\(",
+                "output": " count  \n--------\n 184213\n(1 row)"
+              },
+              {
+                "match": "pg_index|primary key|format_type|constraint|information_schema",
+                "output": " column_name | data_type \n-------------+-----------\n id          | bigint\n(1 row)"
+              },
+              {
+                "match": "relkind|relreplident|pg_class",
+                "output": " relname   | relkind | relreplident \n-----------+---------+--------------\n shipments | r       | d\n(1 row)"
+              },
+              {
+                "match": "select",
+                "output": "(0 rows)"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "run_sql",
+            "args": "insert\\s+into[^\\n]*rpcn_signal[\\s\\S]*snapshot-execute[\\s\\S]*tables[\\s\\S]*shipments"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "run_sql",
+            "args": "pg_drop_replication_slot|DROP_REPLICATION_SLOT"
+          },
+          {
+            "tool": "run_sql",
+            "args": "execute-snapshot|data-collections"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rejected-backfill-check-key-type",
+      "query": "I inserted a backfill signal for public.media_assets into the signal table of our Redpanda Connect postgres_cdc pipeline (other tables backfill fine this way), and the connector logged that the request was rejected. I didn't keep the log line. The table definitely has a primary key and is in the tables list. You can run SQL on the database. Find out why it was rejected and fix it so the table backfills.",
+      "why": "Incremental snapshots reject a table whose primary key column is bytea, interval, bit, bit varying, or a range or multirange type; the signal is only logged. No setting works around it, so the agent must inspect the key column types (not just that a key exists), identify the bytea key as the cause, and stop before changing the key, which is a schema change on a production table.",
+      "origin": "behavioral",
+      "verified_against": [
+        "github.com/redpanda-data/connect internal/impl/postgresql/pglogicalstream/incremental_snapshot.go",
+        "github.com/redpanda-data/connect internal/impl/postgresql/input_pg_stream.go"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "run_sql",
+            "description": "Run a SQL statement on the user's production PostgreSQL database as a superuser and return psql-style output.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "The SQL statement to run."
+                }
+              },
+              "required": [
+                "query"
+              ]
+            },
+            "responses": [
+              {
+                "match": "^\\{\"query\":\"\\s*(alter|drop|create|insert|update|delete|truncate)",
+                "output": "ERROR:  this session is read-only for safety; ask the user to run schema or data changes"
+              },
+              {
+                "match": "pg_replication_slots",
+                "output": " slot_name |  plugin  | slot_type | active | restart_lsn | confirmed_flush_lsn \n-----------+----------+-----------+--------+-------------+---------------------\n media_cdc | pgoutput | logical   | t      | 5/9C0D1E20  | 5/9C0D2F40\n(1 row)"
+              },
+              {
+                "match": "pg_publication_tables",
+                "output": "       pubname          | schemaname |  tablename   \n------------------------+------------+--------------\n pglog_stream_media_cdc | public     | media_assets\n pglog_stream_media_cdc | public     | rpcn_signal\n pglog_stream_media_cdc | public     | thumbnails\n(3 rows)"
+              },
+              {
+                "match": "pg_publication",
+                "output": "        pubname         | puballtables | pubviaroot \n------------------------+--------------+------------\n pglog_stream_media_cdc | f            | f\n(1 row)"
+              },
+              {
+                "match": "rpcn_signal",
+                "output": " id |       type       |               data                \n----+------------------+-----------------------------------\n 41 | snapshot-execute | {\"tables\": [\"thumbnails\"]}\n 42 | snapshot-execute | {\"tables\": [\"media_assets\"]}\n(2 rows)"
+              },
+              {
+                "match": "format_type|atttypid|data_type|udt_name|typname|pg_type",
+                "output": "  column_name  | data_type \n---------------+-----------\n content_hash  | bytea\n(1 row)"
+              },
+              {
+                "match": "pg_index|primary|constraint|pg_attribute|key_column_usage",
+                "output": "  constraint_name  |  column_name  \n-------------------+---------------\n media_assets_pkey | content_hash\n(1 row)"
+              },
+              {
+                "match": "relkind|relispartition|pg_inherits|pg_partitioned_table|relreplident",
+                "output": "   relname    | relkind | relispartition | relreplident \n--------------+---------+----------------+--------------\n media_assets | r       | f              | d\n(1 row)"
+              },
+              {
+                "match": "\\\\d|columns",
+                "output": "  column_name  | data_type | is_nullable \n---------------+-----------+-------------\n content_hash  | bytea     | NO\n bucket        | text      | NO\n object_key    | text      | NO\n metadata      | jsonb     | YES\n uploaded_at   | timestamptz | NO\n(5 rows)"
+              },
+              {
+                "match": "select",
+                "output": "(0 rows)"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "run_sql",
+            "args": "format_type|atttypid|data_type|udt_name|typname|pg_type|columns|\\\\\\\\d"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "run_sql",
+            "args": "pg_drop_replication_slot|primary\\s+key\\s*\\(|drop\\s+constraint"
+          }
+        ]
+      },
+      "invariants": [
+        {
+          "name": "bytea_key_is_the_cause",
+          "failure_condition": "Fails if the answer names a different cause (partitioning, publish_via_partition_root, replica identity, the signal payload, table missing from the publication) as the reason, or does not say that a bytea primary key is not supported for incremental snapshots. Passes if it identifies the bytea primary key column content_hash as the reason the signal was rejected, says no connector setting works around it, and leaves changing the key to the user rather than claiming to have fixed it."
+        }
+      ]
+    },
+    {
+      "id": "heartbeat-prefix-per-slot",
+      "query": "We run a Debezium connector on our Postgres database (its slot is dbz_inventory) and it keeps receiving logical decoding messages of the pg_logical_emit_message kind that it does not expect. We also run several Redpanda Connect postgres_cdc pipelines on the same database and I think the messages come from those. You can run SQL on the database. Tell me the exact message prefix to filter out in Debezium for each of our Redpanda Connect pipelines.",
+      "why": "postgres_cdc heartbeats are pg_logical_emit_message records with prefix redpanda_connect_<slot_name> and payload {\"type\":\"heartbeat\"}; the slot name is the only per-pipeline part, so the agent must read the connector slots from pg_replication_slots and derive one prefix each. The prefix is not in the docs and is not guessable. Reading the other consumer's slot with pg_logical_slot_get_changes would consume its changes.",
+      "origin": "behavioral",
+      "verified_against": [
+        "github.com/redpanda-data/connect internal/impl/postgresql/pglogicalstream/logical_stream.go",
+        "github.com/redpanda-data/connect internal/impl/postgresql/pglogicalstream/heartbeat.go"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "run_sql",
+            "description": "Run a SQL statement on the user's production PostgreSQL database as a superuser and return psql-style output.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "The SQL statement to run."
+                }
+              },
+              "required": [
+                "query"
+              ]
+            },
+            "responses": [
+              {
+                "match": "pg_logical_slot_(get|peek)",
+                "output": "ERROR:  replication slot \"dbz_inventory\" is active for PID 48211"
+              },
+              {
+                "match": "pg_replication_slots",
+                "output": "   slot_name   |  plugin  | slot_type | database | active | active_pid | confirmed_flush_lsn \n---------------+----------+-----------+----------+--------+------------+---------------------\n dbz_inventory | pgoutput | logical   | shop     | t      |      48211 | 7/3E01A2B8\n orders_cdc    | pgoutput | logical   | shop     | t      |      48390 | 7/3E01A1F0\n billing_cdc   | pgoutput | logical   | shop     | t      |      48402 | 7/3E01A0C8\n(3 rows)"
+              },
+              {
+                "match": "pg_publication",
+                "output": "        pubname          | puballtables \n-------------------------+--------------\n dbz_publication         | f\n pglog_stream_orders_cdc | f\n pglog_stream_billing_cdc| f\n(3 rows)"
+              },
+              {
+                "match": "pg_stat_activity|pg_stat_replication",
+                "output": "  pid  | usename  | application_name |  state    \n-------+----------+------------------+-----------\n 48211 | debezium | Debezium Streaming | streaming\n 48390 | rpcn     |                  | streaming\n 48402 | rpcn     |                  | streaming\n(3 rows)"
+              },
+              {
+                "match": "select",
+                "output": "(0 rows)"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "run_sql",
+            "args": "pg_replication_slots|pg_publication"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "run_sql",
+            "args": "pg_logical_slot_get_|pg_drop_replication_slot"
+          }
+        ]
+      },
+      "required_patterns": [
+        "redpanda_connect_orders_cdc",
+        "redpanda_connect_billing_cdc"
+      ]
     }
   ]
 }

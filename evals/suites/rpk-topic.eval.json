@@ -214,6 +214,306 @@
         }
       ],
       "origin": "targeted"
+    },
+    {
+      "id": "alter-config-regex-preview",
+      "query": "Set retention.ms=86400000 on every topic whose name starts with events- (there are a couple hundred of them). Leave every other topic alone. Go ahead and make the change. You can run commands with the run_shell tool.",
+      "why": "rpk topic alter-config takes -r/--regex, which anchors each expression with ^ and $ and alters every matching topic in one command, and rpk topic list -r accepts the same expression format, so the matched set can be previewed first. The baseline lists topics and loops over them, or alters by regex without previewing the match.",
+      "origin": "behavioral",
+      "verified_against": [
+        "product source"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "run_shell",
+            "description": "Run a shell command on the user's workstation and return its combined stdout and stderr. rpk is installed and its active profile points at the user's Redpanda cluster. Commands run non-interactively.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The shell command line to run, for example: rpk topic list"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            },
+            "responses": [
+              {
+                "match": "alter-config[^|;&]*(-r\\b|--regex)",
+                "output": "TOPIC                       STATUS\nevents-auth-audit           OK\nevents-auth-click           OK\nevents-auth-create          OK\nevents-auth-delete          OK\nevents-auth-error           OK\nevents-auth-login           OK\nevents-auth-logout          OK\nevents-auth-retry           OK\nevents-auth-update          OK\nevents-auth-view            OK\nevents-billing-audit        OK\nevents-billing-click        OK\nevents-billing-create       OK\nevents-billing-delete       OK\nevents-billing-error        OK\nevents-billing-login        OK\nevents-billing-logout       OK\nevents-billing-retry        OK\nevents-billing-update       OK\nevents-billing-view         OK\nevents-cart-audit           OK\nevents-cart-click           OK\nevents-cart-create          OK\nevents-cart-delete          OK\nevents-cart-error           OK\nevents-cart-login           OK\nevents-cart-logout          OK\nevents-cart-retry           OK\nevents-cart-update          OK\nevents-cart-view            OK\nevents-catalog-audit        OK\nevents-catalog-click        OK\nevents-catalog-create       OK\nevents-catalog-delete       OK\nevents-catalog-error        OK\nevents-catalog-login        OK\nevents-catalog-logout       OK\nevents-catalog-retry        OK\nevents-catalog-update       OK\nevents-catalog-view         OK\nevents-checkout-audit       OK\nevents-checkout-click       OK\nevents-checkout-create      OK\nevents-checkout-delete      OK\nevents-checkout-error       OK\nevents-checkout-login       OK\nevents-checkout-logout      OK\nevents-checkout-retry       OK\nevents-checkout-update      OK\nevents-checkout-view        OK\nevents-email-audit          OK\nevents-email-click          OK\nevents-email-create         OK\nevents-email-delete         OK\nevents-email-error          OK\nevents-email-login          OK\nevents-email-logout         OK\nevents-email-retry          OK\nevents-email-update         OK\nevents-email-view           OK\nevents-fraud-audit          OK\nevents-fraud-click          OK\nevents-fraud-create         OK\nevents-fraud-delete         OK\nevents-fraud-error          OK\nevents-fraud-login          OK\nevents-fraud-logout         OK\nevents-fraud-retry          OK\nevents-fraud-update         OK\nevents-fraud-view           OK\nevents-inventory-audit      OK\nevents-inventory-click      OK\nevents-inventory-create     OK\nevents-inventory-delete     OK\nevents-inventory-error      OK\nevents-inventory-login      OK\nevents-inventory-logout     OK\nevents-inventory-retry      OK\nevents-inventory-update     OK\nevents-inventory-view       OK\nevents-ledger-audit         OK\nevents-ledger-click         OK\nevents-ledger-create        OK\nevents-ledger-delete        OK\nevents-ledger-error         OK\nevents-ledger-login         OK\nevents-ledger-logout        OK\nevents-ledger-retry         OK\nevents-ledger-update        OK\nevents-ledger-view          OK\nevents-login-audit          OK\nevents-login-click          OK\nevents-login-create         OK\nevents-login-delete         OK\nevents-login-error          OK\nevents-login-login          OK\nevents-login-logout         OK\nevents-login-retry          OK\nevents-login-update         OK\nevents-login-view           OK\nevents-notify-audit         OK\nevents-notify-click         OK\nevents-notify-create        OK\nevents-notify-delete        OK\nevents-notify-error         OK\nevents-notify-login         OK\nevents-notify-logout        OK\nevents-notify-retry         OK\nevents-notify-update        OK\nevents-notify-view          OK\nevents-orders-audit         OK\nevents-orders-click         OK\nevents-orders-create        OK\nevents-orders-delete        OK\nevents-orders-error         OK\nevents-orders-login         OK\nevents-orders-logout        OK\nevents-orders-retry         OK\nevents-orders-update        OK\nevents-orders-view          OK\nevents-payments-audit       OK\nevents-payments-click       OK\nevents-payments-create      OK\nevents-payments-delete      OK\nevents-payments-error       OK\nevents-payments-login       OK\nevents-payments-logout      OK\nevents-payments-retry       OK\nevents-payments-update      OK\nevents-payments-view        OK\nevents-pricing-audit        OK\nevents-pricing-click        OK\nevents-pricing-create       OK\nevents-pricing-delete       OK\nevents-pricing-error        OK\nevents-pricing-login        OK\nevents-pricing-logout       OK\nevents-pricing-retry        OK\nevents-pricing-update       OK\nevents-pricing-view         OK\nevents-profile-audit        OK\nevents-profile-click        OK\nevents-profile-create       OK\nevents-profile-delete       OK\nevents-profile-error        OK\nevents-profile-login        OK\nevents-profile-logout       OK\nevents-profile-retry        OK\nevents-profile-update       OK\nevents-profile-view         OK\nevents-search-audit         OK\nevents-search-click         OK\nevents-search-create        OK\nevents-search-delete        OK\nevents-search-error         OK\nevents-search-login         OK\nevents-search-logout        OK\nevents-search-retry         OK\nevents-search-update        OK\nevents-search-view          OK\nevents-session-audit        OK\nevents-session-click        OK\nevents-session-create       OK\nevents-session-delete       OK\nevents-session-error        OK\nevents-session-login        OK\nevents-session-logout       OK\nevents-session-retry        OK\nevents-session-update       OK\nevents-session-view         OK\nevents-shipping-audit       OK\nevents-shipping-click       OK\nevents-shipping-create      OK\nevents-shipping-delete      OK\nevents-shipping-error       OK\nevents-shipping-login       OK\nevents-shipping-logout      OK\nevents-shipping-retry       OK\nevents-shipping-update      OK\nevents-shipping-view        OK\nevents-support-audit        OK\nevents-support-click        OK\nevents-support-create       OK\nevents-support-delete       OK\nevents-support-error        OK\nevents-support-login        OK\nevents-support-logout       OK\nevents-support-retry        OK\nevents-support-update       OK\nevents-support-view         OK\nevents-web-audit            OK\nevents-web-click            OK\nevents-web-create           OK\nevents-web-delete           OK\nevents-web-error            OK\nevents-web-login            OK\nevents-web-logout           OK\nevents-web-retry            OK\nevents-web-update           OK\nevents-web-view             OK"
+              },
+              {
+                "match": "\\b(for|while|xargs)\\b.*alter-config",
+                "output": "TOPIC                       STATUS\nevents-auth-audit           OK\nevents-auth-click           OK\nevents-auth-create          OK\nevents-auth-delete          OK\nevents-auth-error           OK\nevents-auth-login           OK\nevents-auth-logout          OK\nevents-auth-retry           OK\nevents-auth-update          OK\nevents-auth-view            OK\nevents-billing-audit        OK\nevents-billing-click        OK\nevents-billing-create       OK\nevents-billing-delete       OK\nevents-billing-error        OK\nevents-billing-login        OK\nevents-billing-logout       OK\nevents-billing-retry        OK\nevents-billing-update       OK\nevents-billing-view         OK\nevents-cart-audit           OK\nevents-cart-click           OK\nevents-cart-create          OK\nevents-cart-delete          OK\nevents-cart-error           OK\nevents-cart-login           OK\nevents-cart-logout          OK\nevents-cart-retry           OK\nevents-cart-update          OK\nevents-cart-view            OK\nevents-catalog-audit        OK\nevents-catalog-click        OK\nevents-catalog-create       OK\nevents-catalog-delete       OK\nevents-catalog-error        OK\nevents-catalog-login        OK\nevents-catalog-logout       OK\nevents-catalog-retry        OK\nevents-catalog-update       OK\nevents-catalog-view         OK\nevents-checkout-audit       OK\nevents-checkout-click       OK\nevents-checkout-create      OK\nevents-checkout-delete      OK\nevents-checkout-error       OK\nevents-checkout-login       OK\nevents-checkout-logout      OK\nevents-checkout-retry       OK\nevents-checkout-update      OK\nevents-checkout-view        OK\nevents-email-audit          OK\nevents-email-click          OK\nevents-email-create         OK\nevents-email-delete         OK\nevents-email-error          OK\nevents-email-login          OK\nevents-email-logout         OK\nevents-email-retry          OK\nevents-email-update         OK\nevents-email-view           OK\nevents-fraud-audit          OK\nevents-fraud-click          OK\nevents-fraud-create         OK\nevents-fraud-delete         OK\nevents-fraud-error          OK\nevents-fraud-login          OK\nevents-fraud-logout         OK\nevents-fraud-retry          OK\nevents-fraud-update         OK\nevents-fraud-view           OK\nevents-inventory-audit      OK\nevents-inventory-click      OK\nevents-inventory-create     OK\nevents-inventory-delete     OK\nevents-inventory-error      OK\nevents-inventory-login      OK\nevents-inventory-logout     OK\nevents-inventory-retry      OK\nevents-inventory-update     OK\nevents-inventory-view       OK\nevents-ledger-audit         OK\nevents-ledger-click         OK\nevents-ledger-create        OK\nevents-ledger-delete        OK\nevents-ledger-error         OK\nevents-ledger-login         OK\nevents-ledger-logout        OK\nevents-ledger-retry         OK\nevents-ledger-update        OK\nevents-ledger-view          OK\nevents-login-audit          OK\nevents-login-click          OK\nevents-login-create         OK\nevents-login-delete         OK\nevents-login-error          OK\nevents-login-login          OK\nevents-login-logout         OK\nevents-login-retry          OK\nevents-login-update         OK\nevents-login-view           OK\nevents-notify-audit         OK\nevents-notify-click         OK\nevents-notify-create        OK\nevents-notify-delete        OK\nevents-notify-error         OK\nevents-notify-login         OK\nevents-notify-logout        OK\nevents-notify-retry         OK\nevents-notify-update        OK\nevents-notify-view          OK\nevents-orders-audit         OK\nevents-orders-click         OK\nevents-orders-create        OK\nevents-orders-delete        OK\nevents-orders-error         OK\nevents-orders-login         OK\nevents-orders-logout        OK\nevents-orders-retry         OK\nevents-orders-update        OK\nevents-orders-view          OK\nevents-payments-audit       OK\nevents-payments-click       OK\nevents-payments-create      OK\nevents-payments-delete      OK\nevents-payments-error       OK\nevents-payments-login       OK\nevents-payments-logout      OK\nevents-payments-retry       OK\nevents-payments-update      OK\nevents-payments-view        OK\nevents-pricing-audit        OK\nevents-pricing-click        OK\nevents-pricing-create       OK\nevents-pricing-delete       OK\nevents-pricing-error        OK\nevents-pricing-login        OK\nevents-pricing-logout       OK\nevents-pricing-retry        OK\nevents-pricing-update       OK\nevents-pricing-view         OK\nevents-profile-audit        OK\nevents-profile-click        OK\nevents-profile-create       OK\nevents-profile-delete       OK\nevents-profile-error        OK\nevents-profile-login        OK\nevents-profile-logout       OK\nevents-profile-retry        OK\nevents-profile-update       OK\nevents-profile-view         OK\nevents-search-audit         OK\nevents-search-click         OK\nevents-search-create        OK\nevents-search-delete        OK\nevents-search-error         OK\nevents-search-login         OK\nevents-search-logout        OK\nevents-search-retry         OK\nevents-search-update        OK\nevents-search-view          OK\nevents-session-audit        OK\nevents-session-click        OK\nevents-session-create       OK\nevents-session-delete       OK\nevents-session-error        OK\nevents-session-login        OK\nevents-session-logout       OK\nevents-session-retry        OK\nevents-session-update       OK\nevents-session-view         OK\nevents-shipping-audit       OK\nevents-shipping-click       OK\nevents-shipping-create      OK\nevents-shipping-delete      OK\nevents-shipping-error       OK\nevents-shipping-login       OK\nevents-shipping-logout      OK\nevents-shipping-retry       OK\nevents-shipping-update      OK\nevents-shipping-view        OK\nevents-support-audit        OK\nevents-support-click        OK\nevents-support-create       OK\nevents-support-delete       OK\nevents-support-error        OK\nevents-support-login        OK\nevents-support-logout       OK\nevents-support-retry        OK\nevents-support-update       OK\nevents-support-view         OK\nevents-web-audit            OK\nevents-web-click            OK\nevents-web-create           OK\nevents-web-delete           OK\nevents-web-error            OK\nevents-web-login            OK\nevents-web-logout           OK\nevents-web-retry            OK\nevents-web-update           OK\nevents-web-view             OK"
+              },
+              {
+                "match": "alter-config",
+                "output": "TOPIC                       STATUS\nevents-auth-audit           OK"
+              },
+              {
+                "match": "topic (list|ls)[^|;&]*(-r\\b|--regex)[^|;&]*events-",
+                "output": "NAME                        PARTITIONS  REPLICAS\nevents-auth-audit           6           3\nevents-auth-click           3           3\nevents-auth-create          6           3\nevents-auth-delete          12          3\nevents-auth-error           3           3\nevents-auth-login           3           3\nevents-auth-logout          12          3\nevents-auth-retry           3           3\nevents-auth-update          6           3\nevents-auth-view            12          3\nevents-billing-audit        3           3\nevents-billing-click        12          3\nevents-billing-create       3           3\nevents-billing-delete       3           3\nevents-billing-error        3           3\nevents-billing-login        6           3\nevents-billing-logout       6           3\nevents-billing-retry        3           3\nevents-billing-update       3           3\nevents-billing-view         3           3\nevents-cart-audit           12          3\nevents-cart-click           6           3\nevents-cart-create          3           3\nevents-cart-delete          12          3\nevents-cart-error           3           3\nevents-cart-login           3           3\nevents-cart-logout          12          3\nevents-cart-retry           12          3\nevents-cart-update          12          3\nevents-cart-view            3           3\nevents-catalog-audit        12          3\nevents-catalog-click        12          3\nevents-catalog-create       6           3\nevents-catalog-delete       3           3\nevents-catalog-error        3           3\nevents-catalog-login        3           3\nevents-catalog-logout       12          3\nevents-catalog-retry        3           3\nevents-catalog-update       6           3\nevents-catalog-view         6           3\nevents-checkout-audit       3           3\nevents-checkout-click       12          3\nevents-checkout-create      3           3\nevents-checkout-delete      12          3\nevents-checkout-error       6           3\nevents-checkout-login       12          3\nevents-checkout-logout      12          3\nevents-checkout-retry       3           3\nevents-checkout-update      3           3\nevents-checkout-view        12          3\nevents-email-audit          12          3\nevents-email-click          12          3\nevents-email-create         3           3\nevents-email-delete         6           3\nevents-email-error          3           3\nevents-email-login          12          3\nevents-email-logout         12          3\nevents-email-retry          3           3\nevents-email-update         12          3\nevents-email-view           3           3\nevents-fraud-audit          12          3\nevents-fraud-click          3           3\nevents-fraud-create         6           3\nevents-fraud-delete         12          3\nevents-fraud-error          12          3\nevents-fraud-login          6           3\nevents-fraud-logout         6           3\nevents-fraud-retry          6           3\nevents-fraud-update         12          3\nevents-fraud-view           6           3\nevents-inventory-audit      6           3\nevents-inventory-click      6           3\nevents-inventory-create     3           3\nevents-inventory-delete     3           3\nevents-inventory-error      12          3\nevents-inventory-login      3           3\nevents-inventory-logout     3           3\nevents-inventory-retry      12          3\nevents-inventory-update     6           3\nevents-inventory-view       12          3\nevents-ledger-audit         6           3\nevents-ledger-click         6           3\nevents-ledger-create        12          3\nevents-ledger-delete        6           3\nevents-ledger-error         6           3\nevents-ledger-login         12          3\nevents-ledger-logout        3           3\nevents-ledger-retry         3           3\nevents-ledger-update        12          3\nevents-ledger-view          6           3\nevents-login-audit          3           3\nevents-login-click          6           3\nevents-login-create         3           3\nevents-login-delete         6           3\nevents-login-error          6           3\nevents-login-login          3           3\nevents-login-logout         12          3\nevents-login-retry          3           3\nevents-login-update         12          3\nevents-login-view           12          3\nevents-notify-audit         6           3\nevents-notify-click         6           3\nevents-notify-create        12          3\nevents-notify-delete        6           3\nevents-notify-error         12          3\nevents-notify-login         6           3\nevents-notify-logout        12          3\nevents-notify-retry         6           3\nevents-notify-update        3           3\nevents-notify-view          3           3\nevents-orders-audit         6           3\nevents-orders-click         6           3\nevents-orders-create        12          3\nevents-orders-delete        12          3\nevents-orders-error         3           3\nevents-orders-login         3           3\nevents-orders-logout        12          3\nevents-orders-retry         12          3\nevents-orders-update        6           3\nevents-orders-view          12          3\nevents-payments-audit       12          3\nevents-payments-click       12          3\nevents-payments-create      6           3\nevents-payments-delete      6           3\nevents-payments-error       12          3\nevents-payments-login       6           3\nevents-payments-logout      12          3\nevents-payments-retry       6           3\nevents-payments-update      3           3\nevents-payments-view        6           3\nevents-pricing-audit        6           3\nevents-pricing-click        3           3\nevents-pricing-create       12          3\nevents-pricing-delete       3           3\nevents-pricing-error        6           3\nevents-pricing-login        3           3\nevents-pricing-logout       3           3\nevents-pricing-retry        6           3\nevents-pricing-update       3           3\nevents-pricing-view         12          3\nevents-profile-audit        3           3\nevents-profile-click        6           3\nevents-profile-create       6           3\nevents-profile-delete       6           3\nevents-profile-error        3           3\nevents-profile-login        3           3\nevents-profile-logout       6           3\nevents-profile-retry        6           3\nevents-profile-update       12          3\nevents-profile-view         6           3\nevents-search-audit         3           3\nevents-search-click         6           3\nevents-search-create        12          3\nevents-search-delete        6           3\nevents-search-error         12          3\nevents-search-login         6           3\nevents-search-logout        6           3\nevents-search-retry         12          3\nevents-search-update        6           3\nevents-search-view          3           3\nevents-session-audit        3           3\nevents-session-click        3           3\nevents-session-create       3           3\nevents-session-delete       3           3\nevents-session-error        3           3\nevents-session-login        12          3\nevents-session-logout       3           3\nevents-session-retry        3           3\nevents-session-update       6           3\nevents-session-view         12          3\nevents-shipping-audit       3           3\nevents-shipping-click       6           3\nevents-shipping-create      6           3\nevents-shipping-delete      3           3\nevents-shipping-error       3           3\nevents-shipping-login       6           3\nevents-shipping-logout      12          3\nevents-shipping-retry       6           3\nevents-shipping-update      12          3\nevents-shipping-view        12          3\nevents-support-audit        6           3\nevents-support-click        3           3\nevents-support-create       12          3\nevents-support-delete       12          3\nevents-support-error        12          3\nevents-support-login        12          3\nevents-support-logout       12          3\nevents-support-retry        12          3\nevents-support-update       3           3\nevents-support-view         6           3\nevents-web-audit            12          3\nevents-web-click            12          3\nevents-web-create           6           3\nevents-web-delete           6           3\nevents-web-error            6           3\nevents-web-login            6           3\nevents-web-logout           3           3\nevents-web-retry            6           3\nevents-web-update           12          3\nevents-web-view             6           3"
+              },
+              {
+                "match": "topic (list|ls)",
+                "output": "NAME                        PARTITIONS  REPLICAS\naudit-log                   3           3\nevents-auth-audit           3           3\nevents-auth-click           3           3\nevents-auth-create          3           3\nevents-auth-delete          6           3\nevents-auth-error           3           3\nevents-auth-login           3           3\nevents-auth-logout          6           3\nevents-auth-retry           12          3\nevents-auth-update          3           3\nevents-auth-view            3           3\nevents-billing-audit        3           3\nevents-billing-click        12          3\nevents-billing-create       3           3\nevents-billing-delete       12          3\nevents-billing-error        3           3\nevents-billing-login        6           3\nevents-billing-logout       12          3\nevents-billing-retry        3           3\nevents-billing-update       3           3\nevents-billing-view         3           3\nevents-cart-audit           12          3\nevents-cart-click           6           3\nevents-cart-create          3           3\nevents-cart-delete          12          3\nevents-cart-error           6           3\nevents-cart-login           6           3\nevents-cart-logout          12          3\nevents-cart-retry           6           3\nevents-cart-update          6           3\nevents-cart-view            3           3\nevents-catalog-audit        3           3\nevents-catalog-click        6           3\nevents-catalog-create       6           3\nevents-catalog-delete       6           3\nevents-catalog-error        6           3\nevents-catalog-login        6           3\nevents-catalog-logout       3           3\nevents-catalog-retry        3           3\nevents-catalog-update       3           3\nevents-catalog-view         12          3\nevents-checkout-audit       6           3\nevents-checkout-click       12          3\nevents-checkout-create      6           3\nevents-checkout-delete      6           3\nevents-checkout-error       12          3\nevents-checkout-login       3           3\nevents-checkout-logout      12          3\nevents-checkout-retry       3           3\nevents-checkout-update      3           3\nevents-checkout-view        12          3\nevents-email-audit          6           3\nevents-email-click          3           3\nevents-email-create         12          3\nevents-email-delete         12          3\nevents-email-error          3           3\nevents-email-login          12          3\nevents-email-logout         6           3\nevents-email-retry          12          3\nevents-email-update         3           3\nevents-email-view           12          3\nevents-fraud-audit          6           3\nevents-fraud-click          12          3\nevents-fraud-create         6           3\nevents-fraud-delete         3           3\nevents-fraud-error          6           3\nevents-fraud-login          3           3\nevents-fraud-logout         12          3\nevents-fraud-retry          12          3\nevents-fraud-update         12          3\nevents-fraud-view           6           3\nevents-inventory-audit      12          3\nevents-inventory-click      3           3\nevents-inventory-create     12          3\nevents-inventory-delete     3           3\nevents-inventory-error      3           3\nevents-inventory-login      6           3\nevents-inventory-logout     12          3\nevents-inventory-retry      3           3\nevents-inventory-update     3           3\nevents-inventory-view       12          3\nevents-ledger-audit         6           3\nevents-ledger-click         6           3\nevents-ledger-create        12          3\nevents-ledger-delete        3           3\nevents-ledger-error         3           3\nevents-ledger-login         6           3\nevents-ledger-logout        6           3\nevents-ledger-retry         6           3\nevents-ledger-update        3           3\nevents-ledger-view          12          3\nevents-login-audit          12          3\nevents-login-click          6           3\nevents-login-create         6           3\nevents-login-delete         12          3\nevents-login-error          6           3\nevents-login-login          6           3\nevents-login-logout         3           3\nevents-login-retry          3           3\nevents-login-update         3           3\nevents-login-view           3           3\nevents-notify-audit         6           3\nevents-notify-click         3           3\nevents-notify-create        6           3\nevents-notify-delete        3           3\nevents-notify-error         6           3\nevents-notify-login         12          3\nevents-notify-logout        12          3\nevents-notify-retry         3           3\nevents-notify-update        6           3\nevents-notify-view          12          3\nevents-orders-audit         6           3\nevents-orders-click         12          3\nevents-orders-create        3           3\nevents-orders-delete        12          3\nevents-orders-error         3           3\nevents-orders-login         6           3\nevents-orders-logout        12          3\nevents-orders-retry         3           3\nevents-orders-update        6           3\nevents-orders-view          3           3\nevents-payments-audit       6           3\nevents-payments-click       12          3\nevents-payments-create      6           3\nevents-payments-delete      3           3\nevents-payments-error       12          3\nevents-payments-login       6           3\nevents-payments-logout      6           3\nevents-payments-retry       6           3\nevents-payments-update      12          3\nevents-payments-view        3           3\nevents-pricing-audit        12          3\nevents-pricing-click        3           3\nevents-pricing-create       3           3\nevents-pricing-delete       3           3\nevents-pricing-error        3           3\nevents-pricing-login        3           3\nevents-pricing-logout       12          3\nevents-pricing-retry        6           3\nevents-pricing-update       12          3\nevents-pricing-view         3           3\nevents-profile-audit        12          3\nevents-profile-click        12          3\nevents-profile-create       6           3\nevents-profile-delete       12          3\nevents-profile-error        6           3\nevents-profile-login        3           3\nevents-profile-logout       12          3\nevents-profile-retry        12          3\nevents-profile-update       3           3\nevents-profile-view         3           3\nevents-search-audit         3           3\nevents-search-click         12          3\nevents-search-create        12          3\nevents-search-delete        3           3\nevents-search-error         12          3\nevents-search-login         12          3\nevents-search-logout        3           3\nevents-search-retry         6           3\nevents-search-update        3           3\nevents-search-view          3           3\nevents-session-audit        3           3\nevents-session-click        6           3\nevents-session-create       3           3\nevents-session-delete       6           3\nevents-session-error        12          3\nevents-session-login        3           3\nevents-session-logout       12          3\nevents-session-retry        6           3\nevents-session-update       6           3\nevents-session-view         12          3\nevents-shipping-audit       6           3\nevents-shipping-click       3           3\nevents-shipping-create      3           3\nevents-shipping-delete      12          3\nevents-shipping-error       6           3\nevents-shipping-login       6           3\nevents-shipping-logout      12          3\nevents-shipping-retry       12          3\nevents-shipping-update      12          3\nevents-shipping-view        6           3\nevents-support-audit        12          3\nevents-support-click        3           3\nevents-support-create       12          3\nevents-support-delete       3           3\nevents-support-error        12          3\nevents-support-login        12          3\nevents-support-logout       3           3\nevents-support-retry        6           3\nevents-support-update       3           3\nevents-support-view         12          3\nevents-web-audit            3           3\nevents-web-click            3           3\nevents-web-create           3           3\nevents-web-delete           3           3\nevents-web-error            6           3\nevents-web-login            12          3\nevents-web-logout           12          3\nevents-web-retry            3           3\nevents-web-update           12          3\nevents-web-view             3           3\nevents_legacy               6           3\nmy-events-archive           12          3\norders                      12          3\npayments                    12          3\nsessions                    12          3"
+              },
+              {
+                "match": "topic (describe|info)\\b",
+                "output": "SUMMARY\n=======\nNAME        events-auth-audit\nPARTITIONS  6\nREPLICAS    3\n\nCONFIGS\n=======\nKEY             VALUE      SOURCE\ncleanup.policy  delete     DEFAULT_CONFIG\nretention.ms    604800000  DEFAULT_CONFIG"
+              },
+              {
+                "match": "alter-config[^|;&]*(-h\\b|--help)",
+                "output": "Set, delete, add, and remove key/value configs for a topic.\n\nUsage:\n  rpk topic alter-config [TOPICS...] --set key=value --delete key2,key3 [flags]\n\nFlags:\n      --append stringArray     key=value; Value to append to a list-of-values key (repeatable)\n  -d, --delete stringArray     Key to delete (repeatable)\n      --dry                    Dry run: validate the alter request, but do not apply\n  -h, --help                   Help for alter-config\n      --no-confirm             Disable confirmation prompt\n  -r, --regex                  Parse topics as regex; alter any topic that matches any input topic expression\n  -s, --set stringArray        key=value; Pair to set (repeatable)\n      --subtract stringArray   key=value; Value to remove from list-of-values key (repeatable)"
+              }
+            ]
+          }
+        ],
+        "ordered_calls": [
+          {
+            "tool": "run_shell",
+            "args": "topic (list|ls)[^|;&]*(-r\\b|--regex)[^|;&]*events-"
+          },
+          {
+            "tool": "run_shell",
+            "args": "alter-config[^|;&]*(-r\\b|--regex)[^|;&]*events-"
+          }
+        ]
+      }
+    },
+    {
+      "id": "produce-parsed-partition-file",
+      "query": "I have a file /data/orders.txt with 50,000 lines. Each line is a partition number, a space, and a JSON value, and each record has to land on exactly the partition at the start of its line. Produce the whole file to topic orders with rpk. You can run commands with the run_shell tool.",
+      "why": "rpk topic produce honors a partition parsed with %p only when a non-negative -p/--partition flag is also passed; the flag switches rpk to manual partitioning and the parsed value then overrides it. Without it, %p is parsed but records go to the default partitioner's choice.",
+      "origin": "behavioral",
+      "verified_against": [
+        "product source"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "run_shell",
+            "description": "Run a shell command on the user's workstation and return its combined stdout and stderr. rpk is installed and its active profile points at the user's Redpanda cluster. Commands run non-interactively.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The shell command line to run, for example: rpk topic list"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            },
+            "responses": [
+              {
+                "match": "produce(?=[^|;&]*%p)(?=[^|;&]*(\\s-p|--partition)[\\s=]+\\d)",
+                "output": "Produced to partition 2 at offset 1200 with timestamp 1761040812000.\nProduced to partition 0 at offset 1201 with timestamp 1761040812001.\nProduced to partition 5 at offset 1202 with timestamp 1761040812002.\nProduced to partition 2 at offset 1203 with timestamp 1761040812003.\nProduced to partition 1 at offset 1204 with timestamp 1761040812004.\n... (49995 more lines)"
+              },
+              {
+                "match": "produce(?=[^|;&]*%p)(?![^|;&]*(\\s-p|--partition)[\\s=]+\\d)",
+                "output": "Produced to partition 4 at offset 1200 with timestamp 1761040812000.\nProduced to partition 4 at offset 1201 with timestamp 1761040812001.\nProduced to partition 4 at offset 1202 with timestamp 1761040812002.\nProduced to partition 1 at offset 1203 with timestamp 1761040812003.\nProduced to partition 1 at offset 1204 with timestamp 1761040812004.\n... (49995 more lines)"
+              },
+              {
+                "match": "produce.*(-h\\b|--help)",
+                "output": "Produce records to a topic.\n\nUsage:\n  rpk topic produce [TOPIC] [flags]\n\nFlags:\n      --acks int                      Number of acks required for producing (-1=all, 0=none, 1=leader) (default -1)\n      --allow-auto-topic-creation     Auto-create non-existent topics; requires auto_create_topics_enabled on the broker\n  -z, --compression string            Compression to use for producing batches (none, gzip, snappy, lz4, zstd) (default \"snappy\")\n  -f, --format string                 Input record format (default \"%v\\n\")\n  -H, --header stringArray            Headers in format key:value to add to each record (repeatable)\n  -k, --key string                    A fixed key to use for each record (parsed input keys take precedence)\n  -o, --output-format string          what to write to stdout when a record is successfully produced (default \"Produced to partition %p at offset %o with timestamp %d.\\n\")\n  -p, --partition int32               Partition to directly produce to, if non-negative (also allows %p parsing to set partitions) (default -1)\n  -Z, --tombstone                     Produce empty values as tombstones"
+              },
+              {
+                "match": "produce",
+                "output": "Produced to partition 4 at offset 1200 with timestamp 1761040812000.\nProduced to partition 4 at offset 1201 with timestamp 1761040812001.\nProduced to partition 4 at offset 1202 with timestamp 1761040812002.\nProduced to partition 1 at offset 1203 with timestamp 1761040812003.\nProduced to partition 1 at offset 1204 with timestamp 1761040812004.\n... (49995 more lines)"
+              },
+              {
+                "match": "\\b(head|cat|sed|awk|less)\\b",
+                "output": "2 {\"id\":1}\n0 {\"id\":2}\n5 {\"id\":3}\n2 {\"id\":4}\n1 {\"id\":5}"
+              },
+              {
+                "match": "\\bwc\\b",
+                "output": "50000 /data/orders.txt"
+              },
+              {
+                "match": "topic (describe|info)\\b",
+                "output": "SUMMARY\n=======\nNAME        orders\nPARTITIONS  6\nREPLICAS    3"
+              },
+              {
+                "match": "topic (list|ls)",
+                "output": "NAME      PARTITIONS  REPLICAS\norders    6           3\npayments  6           3"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "run_shell",
+            "args": "produce(?=[^|;&]*%p)(?=[^|;&]*(\\s-p|--partition)[\\s=]+\\d)"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "run_shell",
+            "args": "produce(?=[^|;&]*%p)(?![^|;&]*(\\s-p|--partition)[\\s=]+\\d)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "consume-schema-context-bypass",
+      "query": "Show me the last 3 records on topic orders with the values decoded through Schema Registry. All of our schemas are registered in the default context. I'm logged in as our reporting service account, and I'd rather not touch its ACLs. You can run rpk with the run_rpk tool.",
+      "why": "With --use-schema-registry and no --schema-context, rpk topic consume first reads the topic's redpanda.schema.registry.context through DescribeConfigs and exits when the account may not describe configs. Passing --schema-context '' (or '.') selects the default context and skips that lookup.",
+      "origin": "behavioral",
+      "verified_against": [
+        "product source"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "run_rpk",
+            "description": "Run an rpk command against the user's Redpanda cluster (the active rpk profile is already configured) and return its combined stdout and stderr. Commands run non-interactively.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The full rpk command line to run, for example: rpk topic list"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            },
+            "responses": [
+              {
+                "match": "consume[^|;&]*(-h\\b|--help)",
+                "output": "Consume records from topics.\n\nUsage:\n  rpk topic consume TOPICS... [flags]\n\nFlags:\n  -b, --balancer string                 Group balancer to use if group consuming (range, roundrobin, sticky, cooperative-sticky) (default \"cooperative-sticky\")\n  -f, --format string                   Output format (see --help for details) (default \"json\")\n  -g, --group string                    Group to use for consuming (incompatible with -p)\n  -h, --help                            Help for consume\n      --meta-only                       Print all record info except the record value (for -f json)\n  -n, --num int                         Quit after consuming this number of records (0 is unbounded)\n  -o, --offset string                   Offset to consume from / to (start, end, 47, +2, -3) (default \"start\")\n  -p, --partitions int32Slice           Comma delimited list of specific partitions to consume (default [])\n      --pretty-print                    Pretty print each record over multiple lines (for -f json) (default true)\n      --read-committed                  Opt in to reading only committed offsets\n  -r, --regex                           Parse topics as regex; consume any topic that matches any expression\n      --schema-context string           Schema Registry context to resolve schemas in. Use topic's redpanda.schema.registry.context if unset. '' or '.' force default context.\n      --use-schema-registry strings[=key,value]   If present, rpk will decode the key and the value with the schema registry. Also accepts use-schema-registry=key or use-schema-registry=value"
+              },
+              {
+                "match": "consume(?=[^|;&]*use-schema-registry)(?=[^|;&]*schema-context)",
+                "output": "{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1041\",\n  \"value\": \"{\\\"id\\\":1041,\\\"status\\\":\\\"shipped\\\",\\\"total\\\":42.5}\",\n  \"timestamp\": 1761040812331,\n  \"partition\": 2,\n  \"offset\": 518\n}\n{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1042\",\n  \"value\": \"{\\\"id\\\":1042,\\\"status\\\":\\\"pending\\\",\\\"total\\\":17}\",\n  \"timestamp\": 1761040815902,\n  \"partition\": 0,\n  \"offset\": 733\n}\n{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1043\",\n  \"value\": \"{\\\"id\\\":1043,\\\"status\\\":\\\"pending\\\",\\\"total\\\":96.2}\",\n  \"timestamp\": 1761040816077,\n  \"partition\": 4,\n  \"offset\": 401\n}"
+              },
+              {
+                "match": "consume[^|;&]*use-schema-registry",
+                "output": "unable to determine schema context for topic \"orders\": TOPIC_AUTHORIZATION_FAILED: Not authorized to access topics: [Topic authorization failed.]"
+              },
+              {
+                "match": "consume",
+                "output": "{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1041\",\n  \"value\": \"\\u0000\\u0000\\u0000\\u0000\\u0003\\u0082\\u0010\\u000eshipped\\u0000\\u0000\\u0000\\u0000\\u0000@E@\",\n  \"timestamp\": 1761040812331,\n  \"partition\": 2,\n  \"offset\": 518\n}\n{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1042\",\n  \"value\": \"\\u0000\\u0000\\u0000\\u0000\\u0003\\u0084\\u0010\\u000epending\\u0000\\u0000\\u0000\\u0000\\u0000\\u00001@\",\n  \"timestamp\": 1761040815902,\n  \"partition\": 0,\n  \"offset\": 733\n}\n{\n  \"topic\": \"orders\",\n  \"key\": \"ord-1043\",\n  \"value\": \"\\u0000\\u0000\\u0000\\u0000\\u0003\\u0086\\u0010\\u000epending\\u00cd\\u00cc\\u00cc\\u00cc\\u00cc\\u0004X@\",\n  \"timestamp\": 1761040816077,\n  \"partition\": 4,\n  \"offset\": 401\n}"
+              },
+              {
+                "match": "acl (list|ls)",
+                "output": "PRINCIPAL               HOST  RESOURCE-TYPE  RESOURCE-NAME  RESOURCE-PATTERN-TYPE  OPERATION  PERMISSION  ERROR\nUser:reporting-svc      *     TOPIC          orders         LITERAL                READ       ALLOW\nUser:reporting-svc      *     TOPIC          orders         LITERAL                DESCRIBE   ALLOW\nUser:reporting-svc      *     GROUP          reporting      PREFIXED               READ       ALLOW"
+              },
+              {
+                "match": "registry subject (list|ls)",
+                "output": "SUBJECT\norders-key\norders-value"
+              },
+              {
+                "match": "registry schema get",
+                "output": "SUBJECT       VERSION  ID  TYPE\norders-value  1        3   AVRO"
+              },
+              {
+                "match": "topic (describe|info)\\b",
+                "output": "SUMMARY\n=======\nNAME        orders\nPARTITIONS  6\nREPLICAS    3\n\nCONFIGS\n=======\nunable to describe configs: TOPIC_AUTHORIZATION_FAILED: Not authorized to access topics: [Topic authorization failed.]"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "run_rpk",
+            "args": "consume(?=[^|;&]*use-schema-registry)(?=[^|;&]*schema-context)"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "run_rpk",
+            "args": "acl create"
+          }
+        ]
+      }
+    },
+    {
+      "id": "tiered-storage-on-older-cluster",
+      "origin": "behavioral",
+      "query": "I want Tiered Storage on for a new topic called orders on our self-managed Redpanda cluster. Object storage is already configured for the cluster. What exactly should I run to create the topic? You can run rpk against the cluster with the rpk tool.",
+      "why": "Tiered Storage settings changed between releases: redpanda.storage.mode exists from 26.1, while 25.3 and earlier use redpanda.remote.read and redpanda.remote.write. The rpk client here is newer than the cluster. An agent that answers from the latest docs, or from the rpk client version, tells a 25.3 user to set a property their brokers reject. The skill says to read the cluster's version first.",
+      "verified_against": [
+        "product source",
+        "https://docs.redpanda.com/streaming/25.3/reference/properties/topic-properties/",
+        "https://docs.redpanda.com/streaming/current/reference/properties/topic-properties/"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "rpk",
+            "description": "Run an rpk command against the user's Redpanda cluster and return its output. Pass everything after `rpk` as args, for example \"cluster info\".",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "args"
+              ]
+            },
+            "responses": [
+              {
+                "match": "\"args\":\\s*\"--version",
+                "output": "rpk version v26.2.5 (rev 4f1c2a9)"
+              },
+              {
+                "match": "\"args\":\\s*\"version",
+                "output": "rpk version: v26.2.5\nGit ref:     4f1c2a9\nBuild date:  2026-10-14T09:12:44Z\nOS/Arch:     linux/amd64\nGo version:  go1.24.6\n\nRedpanda Cluster\n  node-0  v25.3.17 - 9b3e7d1c\n  node-1  v25.3.17 - 9b3e7d1c\n  node-2  v25.3.17 - 9b3e7d1c\n"
+              },
+              {
+                "match": "storage\\.mode",
+                "output": "TOPIC   STATUS\norders  INVALID_CONFIG: unknown topic config redpanda.storage.mode"
+              },
+              {
+                "match": "topic create",
+                "output": "TOPIC   STATUS\norders  OK"
+              },
+              {
+                "match": "cluster config get cloud_storage_enabled",
+                "output": "true"
+              },
+              {
+                "match": "admin brokers (list|ls)|cluster info[^\"]*--detailed",
+                "output": "ID    HOST       PORT  CORES  MEMBERSHIP  IS-ALIVE  VERSION\n0*    10.0.1.10  9092  4      active      true      v25.3.17\n1     10.0.1.11  9092  4      active      true      v25.3.17\n2     10.0.1.12  9092  4      active      true      v25.3.17\n"
+              },
+              {
+                "match": "cluster info",
+                "output": "CLUSTER\n=======\nredpanda.4c8e7a1f-2b6d-4f0e-9a3c-7d1e5b2f8a60\n\nBROKERS\n=======\nID    HOST       PORT\n0*    10.0.1.10  9092\n1     10.0.1.11  9092\n2     10.0.1.12  9092\n"
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "rpk",
+            "args": "\"args\":\\s*\"(version|redpanda admin brokers (list|ls)|cluster info[^\"]*--detailed)"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "rpk",
+            "args": "storage\\.mode"
+          }
+        ]
+      },
+      "required_patterns": [
+        "redpanda\\.remote\\.write"
+      ],
+      "invariants": [
+        {
+          "name": "no_storage_mode_on_25_3",
+          "failure_condition": "Fails if the answer tells the user to set redpanda.storage.mode, or says the cluster supports it, for this cluster. Passes if it creates the topic with redpanda.remote.read and redpanda.remote.write (or explains that those are the properties on this cluster's version)."
+        }
+      ]
     }
   ]
 }
