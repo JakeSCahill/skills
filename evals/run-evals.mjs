@@ -188,7 +188,12 @@ function parseStream(raw) {
     } catch {
       continue;
     }
-    if (e.type === "system" && e.subtype === "init") run.tools = e.tools ?? [];
+    if (e.type === "system" && e.subtype === "init") {
+      run.tools = e.tools ?? [];
+      run.skills = e.skills ?? [];
+      run.slashCommands = e.slash_commands ?? [];
+      run.plugins = e.plugins ?? [];
+    }
     if (e.type === "user") {
       for (const c of e.message?.content ?? []) {
         if (c.type !== "tool_result") continue;
@@ -206,6 +211,15 @@ function parseStream(raw) {
       run.isError = Boolean(e.is_error);
       run.text = e.result ?? "";
       run.cost = e.total_cost_usd ?? 0;
+      // Tokens, not just dollars: what a user pays depends on their plan, and
+      // cache reads are billed far below fresh input.
+      const u = e.usage ?? {};
+      run.usage = {
+        input: u.input_tokens ?? 0,
+        cacheWrite: u.cache_creation_input_tokens ?? 0,
+        cacheRead: u.cache_read_input_tokens ?? 0,
+        output: u.output_tokens ?? 0,
+      };
     }
   }
   return run;
@@ -257,6 +271,15 @@ async function runSubject(suite, testCase, arm, model) {
     if (run.toolResults.some((r) => r.includes("anonymous_quota_exhausted"))) {
       throw new Error("docs server refused: anonymous quota exhausted (set EVAL_DOCS_CLIENT_KEY)");
     }
+    // The same proof for knowledge the subject could load without a tool: a
+    // skill, a slash command, or a plugin that is not Claude Code's own.
+    // Built-in plugins ship inside the CLI and carry no Redpanda content.
+    const leaked = [
+      ...run.skills.map((x) => `skill ${typeof x === "string" ? x : x.name}`),
+      ...run.slashCommands.map((x) => `command ${typeof x === "string" ? x : x.name}`),
+      ...run.plugins.filter((x) => x.path !== "builtin").map((x) => `plugin ${x.name}`),
+    ];
+    if (leaked.length) throw new Error(`subject loaded what its arm should not: ${leaked.join(", ")}`);
     run.docsCalls = run.toolCalls.filter((c) => c.name.startsWith(`mcp__${DOCS_SERVER}__`)).length;
     return run;
   } finally {
@@ -530,6 +553,7 @@ async function main() {
                 status: g.passed ? "passed" : "failed",
                 reason: g.reason,
                 docsCalls: subject.docsCalls,
+                usage: subject.usage,
                 cost: subject.cost + g.cost,
                 response: subject.text,
                 toolCalls: subject.toolCalls,

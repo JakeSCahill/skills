@@ -77,7 +77,7 @@ Options: `--arms`, `--runs`, `--concurrency` (default 4), `--model` (default
 Results go to `evals/results/<timestamp>/`: `runs.jsonl` has every response and tool call,
 `summary.md` has the tables.
 
-A case run costs roughly $0.03 to $0.15, depending on the arm. Docs arms cost more.
+A case run costs roughly $0.03 (baseline) to $0.21 (both), and `runs.jsonl` records each run's tokens. The skill arms preload SKILL.md and every reference file it names, so they overstate what an installed skill costs a user, which loads references only as needed.
 
 ## Isolation
 
@@ -85,7 +85,7 @@ Every subject runs `claude -p` from an empty temporary directory with setting so
 skills, slash commands, and session persistence off, and only the MCP server its arm declares.
 It cannot see an installed plugin (including this one), a `CLAUDE.md`, auto-memory, or the
 skill files on disk. Each run checks the tools the subject reports against what its arm
-should have, and a mismatch is a harness error, not a result.
+should have, and a mismatch is a harness error, not a result. The same goes for a skill, slash command, or non-built-in plugin showing up in a subject's session.
 
 The skill arms get the skill's `SKILL.md` plus every `references/` file that `SKILL.md`
 names, which is what an agent following the skill would load.
