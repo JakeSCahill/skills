@@ -24,7 +24,8 @@
 // the tools the subject reports against what its arm should have, and treats a
 // mismatch as a harness fault rather than a verdict.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,7 +37,11 @@ const REPO_ROOT = path.join(EVAL_DIR, "..");
 const SUITES_DIR = path.join(EVAL_DIR, "suites");
 const RESULTS_DIR = path.join(EVAL_DIR, "results");
 
-const ARMS = ["baseline", "skill", "docs", "both"];
+// `installed` is what a user with the plugin gets: the skill and the shared
+// redpanda-docs skill, the docs server, and no instruction to look things up.
+// The other docs arms are told to look up first, which measures what the docs
+// contain rather than whether an agent would consult them.
+const ARMS = ["baseline", "skill", "docs", "both", "installed"];
 const DOCS_MCP_URL = process.env.EVAL_DOCS_MCP_URL ?? "https://docs.redpanda.com/mcp";
 const DOCS_SERVER = "redpanda-docs";
 // The read tools only. submit_documentation_feedback writes to a real service,
@@ -117,6 +122,23 @@ function die(msg) {
   process.exit(1);
 }
 
+const CASE_KEYS = new Set(
+  Object.keys(JSON.parse(fs.readFileSync(path.join(EVAL_DIR, "schema.json"), "utf-8")).properties.test_cases.items.properties)
+);
+
+// Which runner and skill text produced a row, so results from different
+// revisions are never pooled into one cell.
+const RUNNER_REV = (() => {
+  try {
+    const rev = execFileSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+    const dirty = execFileSync("git", ["status", "--porcelain", "--", "evals", "skills"], { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+    return dirty ? `${rev}-dirty` : rev;
+  } catch {
+    return "unknown";
+  }
+})();
+const hash = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, 12);
+
 function loadSuites(names) {
   const files = fs
     .readdirSync(SUITES_DIR)
@@ -131,6 +153,12 @@ function loadSuites(names) {
     : files;
   return picked.map((f) => {
     const suite = JSON.parse(fs.readFileSync(path.join(SUITES_DIR, f), "utf-8"));
+    // A mistyped assertion key would be silently ignored and the case would
+    // grade on less than its author meant, so unknown keys stop the run.
+    for (const c of suite.test_cases ?? []) {
+      const unknown = Object.keys(c).filter((k) => !CASE_KEYS.has(k));
+      if (unknown.length) die(`${f}: case ${c.id} has unknown key(s): ${unknown.join(", ")}`);
+    }
     if (!fs.existsSync(path.join(REPO_ROOT, "skills", suite.skill, "SKILL.md"))) {
       die(`${f}: skill "${suite.skill}" has no skills/${suite.skill}/SKILL.md`);
     }
@@ -181,6 +209,7 @@ function baseArgs(prompt, model) {
 }
 
 function parseStream(raw) {
+  const toolNames = new Map();
   const run = { text: "", toolCalls: [], toolResults: [], tools: undefined, cost: 0, sawResult: false, isError: false };
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
@@ -200,12 +229,15 @@ function parseStream(raw) {
       for (const c of e.message?.content ?? []) {
         if (c.type !== "tool_result") continue;
         const body = typeof c.content === "string" ? c.content : JSON.stringify(c.content ?? "");
-        run.toolResults.push(body);
+        run.toolResults.push({ name: toolNames.get(c.tool_use_id), isError: Boolean(c.is_error), body });
       }
     }
     if (e.type === "assistant") {
       for (const c of e.message?.content ?? []) {
-        if (c.type === "tool_use") run.toolCalls.push({ name: c.name, input: c.input });
+        if (c.type === "tool_use") {
+          run.toolCalls.push({ name: c.name, input: c.input });
+          toolNames.set(c.id, c.name);
+        }
       }
     }
     if (e.type === "result") {
@@ -231,11 +263,19 @@ async function runSubject(suite, testCase, arm, model) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "skill-eval-"));
   try {
     const args = baseArgs(testCase.query, model);
-    const withSkill = arm === "skill" || arm === "both";
-    const withDocs = arm === "docs" || arm === "both";
+    const withSkill = arm === "skill" || arm === "both" || arm === "installed";
+    const withDocs = arm === "docs" || arm === "both" || arm === "installed";
     const prompt = [];
-    if (withSkill) prompt.push(skillContext(REPO_ROOT, suite.skill));
-    if (withDocs) prompt.push(DOCS_NUDGE);
+    let skillText = "";
+    if (withSkill) {
+      skillText = skillContext(REPO_ROOT, suite.skill);
+      const shared = path.join(REPO_ROOT, "skills", "redpanda-docs");
+      if (arm === "installed" && suite.skill !== "redpanda-docs" && fs.existsSync(path.join(shared, "SKILL.md"))) {
+        skillText += "\n\n---\n\n" + skillContext(REPO_ROOT, "redpanda-docs");
+      }
+      prompt.push(skillText);
+    }
+    if (withDocs && arm !== "installed") prompt.push(DOCS_NUDGE);
     if (prompt.length) {
       // A file, not an argument: Linux caps one argv element at 128 KiB and
       // some skills with their references are close to that.
@@ -296,8 +336,16 @@ async function runSubject(suite, testCase, arm, model) {
     // The quota refusal comes back as an ordinary tool result, so the subject
     // answers from memory and says it could not check. Scored, that run would
     // count general knowledge as "the docs".
-    if (run.toolResults.some((r) => r.includes("anonymous_quota_exhausted"))) {
+    if (run.toolResults.some((r) => r.body.includes("anonymous_quota_exhausted"))) {
       throw new Error("docs server refused: anonymous quota exhausted (set EVAL_DOCS_CLIENT_KEY)");
+    }
+    // An upstream failure or timeout on the docs server also comes back as an
+    // ordinary result. A docs arm that looked things up and got nothing usable
+    // back never had the docs, so it is a harness error, not "docs not enough".
+    const docsResults = run.toolResults.filter((r) => r.name?.startsWith(`mcp__${DOCS_SERVER}__`));
+    run.docsStatus = docsResults.map((r) => (r.isError || /"error"\s*:/.test(r.body.slice(0, 400)) ? "error" : "ok"));
+    if (docsResults.length && !run.docsStatus.includes("ok")) {
+      throw new Error(`every docs lookup failed: ${docsResults[0].body.slice(0, 160)}`);
     }
     // The same proof for knowledge the subject could load without a tool: a
     // skill, a slash command, or a plugin that is not Claude Code's own.
@@ -314,6 +362,7 @@ async function runSubject(suite, testCase, arm, model) {
     run.mockCalls = fs.existsSync(mockLog)
       ? fs.readFileSync(mockLog, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
       : [];
+    run.skillHash = skillText ? hash(skillText) : null;
     return run;
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -466,7 +515,7 @@ function summarize(suites, results, opts, meta) {
     lines.push(`## ${suite.skill}`, "");
     lines.push(`| Case | ${opts.arms.join(" | ")} | Verdict |`);
     lines.push(`|---|${opts.arms.map(() => "---").join("|")}|---|`);
-    const informative = { both: [0, 0], docs: [0, 0], skill: [0, 0] };
+    const informative = { both: [0, 0], docs: [0, 0], skill: [0, 0], installed: [0, 0] };
     for (const testCase of suite.test_cases) {
       const rows = results.filter((r) => r.suite === suite.name && r.case === testCase.id);
       if (!rows.length) continue;
@@ -500,10 +549,15 @@ function summarize(suites, results, opts, meta) {
     const [bp, bs] = informative.both;
     const [dp, ds] = informative.docs;
     const [sp, ss] = informative.skill;
-    lines.push(
-      `Informative cases only: skill ${pct(sp, ss)}, docs ${pct(dp, ds)}, both ${pct(bp, bs)}.`,
-      ""
-    );
+    const [ip, is] = informative.installed;
+    // "Informative" means the baseline failed; without baseline runs nothing
+    // was filtered, so the line would claim more than it measured.
+    if (opts.arms.includes("baseline")) {
+      lines.push(
+        `Informative cases only: skill ${pct(sp, ss)}, docs ${pct(dp, ds)}, both ${pct(bp, bs)}, installed ${pct(ip, is)}.`,
+        ""
+      );
+    }
   }
   // The two lists worth acting on. A docs gap is something the skill tells an
   // agent that the published docs do not: either document it, or it is the
@@ -554,6 +608,18 @@ function report(opts) {
     if (!fs.existsSync(f)) die(`no runs.jsonl in ${dir}`);
     for (const line of fs.readFileSync(f, "utf-8").split("\n")) if (line.trim()) rows.push(JSON.parse(line));
   }
+  const cells = new Map();
+  for (const r of rows) {
+    const k = `${r.suite}/${r.case}/${r.arm}`;
+    const id = `${r.skillHash ?? "-"} ${r.model ?? "?"}`;
+    if (!cells.has(k)) cells.set(k, new Set());
+    cells.get(k).add(id);
+  }
+  const mixed = [...cells].filter(([, ids]) => ids.size > 1).map(([k]) => k);
+  if (mixed.length) die(`refusing to pool runs of different skill text or models in: ${mixed.slice(0, 5).join(", ")}${mixed.length > 5 ? ", ..." : ""}`);
+  const models = [...new Set(rows.map((r) => r.model ?? "unrecorded"))].join(", ");
+  const judges = [...new Set(rows.map((r) => r.judgeModel ?? "unrecorded"))].join(", ");
+  opts = { ...opts, model: models, judgeModel: judges };
   const suites = loadSuites(opts.suites).filter((s) => rows.some((r) => r.suite === s.name));
   const arms = ARMS.filter((a) => rows.some((r) => r.arm === a));
   const cost = rows.reduce((n, r) => n + (r.cost ?? 0), 0);
@@ -588,9 +654,17 @@ async function main() {
   // Negative control first: a case the know-nothing answer passes cannot fail,
   // so its results would mean nothing. Stop before spending on subjects.
   const cannotFail = [];
+  const skippedControl = [];
   await pool(
     selected.flatMap((suite) =>
       suite.test_cases.map((testCase) => async () => {
+        // Without the judge, a case graded only by invariants passes anything,
+        // so the control has nothing to test there. Say so instead of failing.
+        const onlyInvariants = !testCase.required_patterns?.length && !testCase.failure_patterns?.length && !testCase.tools;
+        if (!opts.judge && onlyInvariants) {
+          skippedControl.push(`${suite.name}/${testCase.id}`);
+          return;
+        }
         const g = await grade(testCase, NULL_ANSWER, opts);
         cost += g.cost;
         if (g.passed) cannotFail.push(`${suite.name}/${testCase.id}`);
@@ -598,6 +672,9 @@ async function main() {
     ),
     opts.concurrency
   );
+  if (skippedControl.length) {
+    console.log(`⚠️  --no-judge: ${skippedControl.length} invariant-only case(s) are ungraded and will pass: ${skippedControl.join(", ")}\n`);
+  }
   if (cannotFail.length) {
     die(`these cases pass an answer that says nothing, so they cannot fail:\n   ${cannotFail.join("\n   ")}`);
   }
@@ -608,7 +685,16 @@ async function main() {
       for (const arm of opts.arms) {
         for (let run = 1; run <= opts.runs; run++) {
           tasks.push(async () => {
-            const row = { suite: suite.name, skill: suite.skill, case: testCase.id, arm, run };
+            const row = {
+              suite: suite.name,
+              skill: suite.skill,
+              case: testCase.id,
+              arm,
+              run,
+              model: opts.model,
+              judgeModel: opts.judge ? opts.judgeModel : null,
+              runnerRev: RUNNER_REV,
+            };
             try {
               const subject = await runSubject(suite, testCase, arm, opts.model);
               const g = await grade(testCase, subject.text, opts, subject.mockCalls);
@@ -617,6 +703,8 @@ async function main() {
                 reason: g.reason,
                 docsCalls: subject.docsCalls,
                 usage: subject.usage,
+                skillHash: subject.skillHash,
+                docsStatus: subject.docsStatus,
                 mockCalls: subject.mockCalls,
                 cost: subject.cost + g.cost,
                 response: subject.text,

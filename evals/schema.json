@@ -91,9 +91,11 @@
             "enum": [
               "docs-cited",
               "sampled",
-              "targeted"
+              "targeted",
+              "behavioral",
+              "held-out"
             ],
-            "description": "How the case was picked. docs-cited: written from a published docs page, so it can only show the docs finding what they say. sampled: a claim taken from the skill without regard to the docs. targeted: a claim the author expected the docs to lack. Report verdicts per origin; never pool them."
+            "description": "How the case was picked. docs-cited: written from a published docs page, so it can only show the docs finding what they say. sampled: a claim taken from the skill without regard to the docs. targeted: a claim the author expected the docs to lack. Report verdicts per origin; never pool them. behavioral: a procedure the skill prescribes, graded on the calls the agent makes (needs a tools block). held-out: a procedure case written without seeing any version of the skill, so it can compare skill versions fairly."
           },
           "tools": {
             "type": "object",
