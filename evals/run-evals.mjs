@@ -55,6 +55,8 @@ const DOCS_CLIENT_KEY = process.env.EVAL_DOCS_CLIENT_KEY;
 // With no tools at all, `claude -p` can stall after its first thinking block.
 // CronList lists scheduled jobs and reads nothing, so it is safe to give every arm.
 const INERT_BUILTIN = "CronList";
+const MOCK_SERVER = "mock";
+const MOCK_SCRIPT = path.join(EVAL_DIR, "scripts", "mock-tools.mjs");
 
 // Told to the docs arms only. Without it, whether the docs arm consults the docs
 // at all is the model's choice, and a run that never looked would be scored as
@@ -242,12 +244,38 @@ async function runSubject(suite, testCase, arm, model) {
       args.push("--append-system-prompt-file", f);
     }
     const expected = [INERT_BUILTIN];
+    const servers = {};
+    const allowed = [];
     if (withDocs) {
-      const cfg = path.join(work, "mcp.json");
       const server = { type: "http", url: DOCS_MCP_URL };
       if (DOCS_CLIENT_KEY) server.headers = { "x-client-key": DOCS_CLIENT_KEY };
-      fs.writeFileSync(cfg, JSON.stringify({ mcpServers: { [DOCS_SERVER]: server } }));
-      args.push("--mcp-config", cfg, "--allowed-tools", DOCS_TOOLS.join(","));
+      servers[DOCS_SERVER] = server;
+      allowed.push(...DOCS_TOOLS);
+    }
+    // A behavioral case's mocked tools are part of the scenario, not knowledge,
+    // so every arm gets them, baseline included. The whole mock surface is
+    // allowed, forbidden calls too: a forbidden call the harness blocked would
+    // prove only that the harness works.
+    const mockLog = path.join(work, "mock-calls.jsonl");
+    if (testCase.tools) {
+      const fixture = path.join(work, "mock-tools.json");
+      fs.writeFileSync(fixture, JSON.stringify(testCase.tools.mock));
+      servers[MOCK_SERVER] = {
+        type: "stdio",
+        command: process.execPath,
+        args: [MOCK_SCRIPT],
+        env: { MOCK_TOOLS: fixture, MOCK_LOG: mockLog },
+      };
+      const mockTools = testCase.tools.mock.map((t) => `mcp__${MOCK_SERVER}__${t.name}`);
+      allowed.push(...mockTools);
+      expected.push(...mockTools);
+    }
+    if (Object.keys(servers).length) {
+      const cfg = path.join(work, "mcp.json");
+      fs.writeFileSync(cfg, JSON.stringify({ mcpServers: servers }));
+      args.push("--mcp-config", cfg, "--allowed-tools", allowed.join(","));
+    }
+    if (withDocs) {
       args.push("--disallowed-tools", DOCS_DENIED.join(","));
       expected.push(...DOCS_TOOLS);
     }
@@ -281,6 +309,11 @@ async function runSubject(suite, testCase, arm, model) {
     ];
     if (leaked.length) throw new Error(`subject loaded what its arm should not: ${leaked.join(", ")}`);
     run.docsCalls = run.toolCalls.filter((c) => c.name.startsWith(`mcp__${DOCS_SERVER}__`)).length;
+    // Grade from the mock's own log, not the transcript: the log is what the
+    // tools actually received.
+    run.mockCalls = fs.existsSync(mockLog)
+      ? fs.readFileSync(mockLog, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
+      : [];
     return run;
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -329,7 +362,37 @@ ${VERDICT_INSTRUCTIONS}`;
 }
 
 // Cheapest first; the first failure decides.
-async function grade(testCase, response, opts) {
+function callMatches(call, spec) {
+  return call.name === spec.tool && (!spec.args || regex(spec.args).test(JSON.stringify(call.args ?? {})));
+}
+
+const describeCall = (spec) => (spec.args ? `${spec.tool} /${spec.args}/` : spec.tool);
+
+// What the subject did, judged from the mock log.
+function gradeCalls(spec, calls) {
+  if (!spec) return undefined;
+  if (spec.first_call && !(calls[0] && callMatches(calls[0], spec.first_call))) {
+    const got = calls[0] ? `${calls[0].name} ${JSON.stringify(calls[0].args)}` : "no calls";
+    return `first call was not ${describeCall(spec.first_call)} (got ${got})`;
+  }
+  for (const c of spec.expected_calls ?? []) {
+    if (!calls.some((call) => callMatches(call, c))) return `never called ${describeCall(c)}`;
+  }
+  for (const c of spec.forbidden_calls ?? []) {
+    if (calls.some((call) => callMatches(call, c))) return `called forbidden ${describeCall(c)}`;
+  }
+  let i = 0;
+  for (const c of spec.ordered_calls ?? []) {
+    while (i < calls.length && !callMatches(calls[i], c)) i++;
+    if (i === calls.length) return `calls out of order: ${describeCall(c)} missing after earlier steps`;
+    i++;
+  }
+  return undefined;
+}
+
+async function grade(testCase, response, opts, calls = []) {
+  const callFailure = gradeCalls(testCase.tools, calls);
+  if (callFailure) return { passed: false, reason: callFailure, cost: 0 };
   for (const p of testCase.failure_patterns ?? []) {
     if (regex(p).test(response)) return { passed: false, reason: `matched failure pattern /${p}/`, cost: 0 };
   }
@@ -548,12 +611,13 @@ async function main() {
             const row = { suite: suite.name, skill: suite.skill, case: testCase.id, arm, run };
             try {
               const subject = await runSubject(suite, testCase, arm, opts.model);
-              const g = await grade(testCase, subject.text, opts);
+              const g = await grade(testCase, subject.text, opts, subject.mockCalls);
               Object.assign(row, {
                 status: g.passed ? "passed" : "failed",
                 reason: g.reason,
                 docsCalls: subject.docsCalls,
                 usage: subject.usage,
+                mockCalls: subject.mockCalls,
                 cost: subject.cost + g.cost,
                 response: subject.text,
                 toolCalls: subject.toolCalls,

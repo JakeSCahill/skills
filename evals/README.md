@@ -126,6 +126,31 @@ A good case is:
 - **Not leaking its answer.** A query that names the flag it then requires is satisfied by
   echoing the question.
 
+### Behavioral cases
+
+A case can grade what the agent does instead of what it says. Give it a `tools` block: a mocked tool surface (`mock`), served to every arm by [`scripts/mock-tools.mjs`](scripts/mock-tools.mjs), plus assertions on the calls the agent made:
+
+```json
+"tools": {
+  "mock": [{
+    "name": "run_sql",
+    "description": "Run a SQL statement on the user's PostgreSQL server.",
+    "responses": [
+      { "match": "wal_level", "output": " wal_level\n-----------\n replica" },
+      { "match": ".", "output": "(0 rows)" }
+    ]
+  }],
+  "first_call": { "tool": "run_sql", "args": "wal_level" },
+  "expected_calls": [{ "tool": "run_sql", "args": "wal_level" }],
+  "forbidden_calls": [{ "tool": "run_sql", "args": "DROP" }],
+  "ordered_calls": [{ "tool": "run_sql", "args": "wal_level" }, { "tool": "run_sql", "args": "pg_replication_slots" }]
+}
+```
+
+Each response's `match` is a regex tested against the call's arguments as JSON, and the first match wins. A call that matches nothing gets an error result, the way a real tool fails on input it doesn't understand. `args` in an assertion is a regex too. Calls are graded from the mock's own log, before any pattern or invariant.
+
+The rule for facts applies to behavior: generic good practice, such as checking the obvious setting first, is something the baseline already does. A behavioral case earns its place only on a procedure specific to the product.
+
 Assert a literal with a pattern and an idea with an invariant. Patterns are
 case-insensitive JavaScript regexes matched against the whole response. Keep
 `failure_patterns` to assertive claims, because a correct answer may mention the wrong option
