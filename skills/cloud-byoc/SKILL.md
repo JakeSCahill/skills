@@ -20,19 +20,9 @@ Every create, update, and delete returns a long-running operation; poll
 
 ## How to work
 
-**Check the zone count before a broker-count PATCH.** Before you send
-`redpanda_node_count`, `GET` the cluster and count its `zones`. On a multi-zone cluster the
-new count must be a multiple of the zone count, so "add one broker" to 3 brokers in 3 zones
-is not a valid request. Do not send a count that is not a multiple. Tell the user the
-nearest valid counts (here 6) and ask which one they want.
-
-**Quote numbers in `custom_properties`.** When you build a create or PATCH body with
-`cluster_configuration.custom_properties`, write every integer or number value as a JSON
-string before you send it.
-
-**Check prerequisites without a cluster.** To check a cloud account before anything exists
-in Redpanda Cloud, run `rpk cloud byoc aws validate`. Do not create a cluster or
-Network just to get an ID.
+No BYOC-specific procedure has yet proven to change an agent's outcome over the docs
+alone, so this skill carries none. Follow `/redpanda:redpanda-docs`, and confirm with the user
+before any change that deletes, scales, or reconfigures a cluster or its Network.
 
 ## Use the docs for everything else
 

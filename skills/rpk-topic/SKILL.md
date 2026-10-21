@@ -19,28 +19,11 @@ else in the docs (last section).
 
 ## How to work
 
-1. **Target many topics by pattern with `-r`, and preview the match first.**
-   `rpk topic alter-config` and `rpk topic delete` take `-r/--regex`, which
-   wraps each expression in `^` and `$` (so `events-` alone matches only a
-   topic named exactly `events-`; write `'events-.*'`). Run
-   `rpk topic list -r '<expr>'` with the same expression first, check the
-   matched set with the user if it is not what they described, then run the
-   change once with `-r` instead of looping over topic names.
-2. **To send each record to a partition parsed from the input, pass `-p` too.**
-   `rpk topic produce -f '%p %v\n'` uses the parsed `%p` only when a
-   non-negative `-p/--partition` is also given (any value, for example `-p 0`);
-   the parsed value then wins. Without `-p`, records go wherever the default
-   partitioner puts them and rpk reports no error.
-3. **When Schema Registry decoding or encoding fails with `unable to determine
-   schema context for topic`, pass `--schema-context` instead of changing
-   ACLs.** Without that flag, `consume --use-schema-registry` and `produce
-   --schema-id`/`--schema-key-id` first read the topic's
-   `redpanda.schema.registry.context` config with DescribeConfigs, and exit if
-   that request fails (for example `TOPIC_AUTHORIZATION_FAILED` for an account
-   that can read the topic but not describe its configs). Setting
-   `--schema-context` skips the lookup: `--schema-context ''` or
-   `--schema-context .` selects the default context, or name the context the
-   topic uses. Ask the user which context only if they have not said.
+**To send each record to a partition parsed from the input, pass `-p` too.**
+`rpk topic produce -f '%p %v\n'` uses the parsed `%p` only when a
+non-negative `-p/--partition` is also given (any value, for example `-p 0`);
+the parsed value then wins. Without `-p`, records go wherever the default
+partitioner puts them and rpk reports no error.
 
 ## Use the docs for everything else
 

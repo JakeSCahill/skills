@@ -16,7 +16,7 @@ Ask if you can't tell from the conversation or the user's environment.
 
 | Product | How to tell |
 |---|---|
-| Redpanda, self-managed | `rpk version` prints the rpk version and, under "Redpanda Cluster", each broker's version (through the Admin API). `rpk redpanda admin brokers list` and `rpk cluster info --detailed` show it in a VERSION column. The rpk version alone (`rpk --version`) is not the cluster's version. |
+| Redpanda, self-managed | `rpk version` prints the rpk version and, under "Redpanda Cluster", each broker's version (through the Admin API). `rpk redpanda admin brokers list` shows it in a VERSION column. The rpk version alone (`rpk --version`) is not the cluster's version. |
 | Redpanda Cloud | `rpk version` does not report a version for Cloud profiles. Cloud has no docs versions, so you only need to know it's Cloud. |
 | Redpanda Connect | `rpk connect --version` |
 
@@ -26,7 +26,7 @@ The plugin installs the Redpanda Docs MCP server (`redpanda-docs`). For `ask_red
 
 - Set `platform` to `cloud` or `self-managed`. Without it, answers mix both.
 - For self-managed Redpanda, set `version` to the user's release as the docs URLs spell it
-  (major.minor, such as `24.3`). Leave it unset, or use `current`, only for the latest release.
+  (major.minor, as in the cluster's version). Leave it unset, or use `current`, only for the latest release.
 - Use `search_api_reference` and `get_api_reference_content` for the Admin, HTTP Proxy, Schema
   Registry, Control Plane, and Data Plane APIs.
 
@@ -49,5 +49,6 @@ Every docs page has a Markdown version: replace the trailing `/` or `.html` in i
 ## 4. Say where the answer came from
 
 Link the page you used. If the docs and the user's system disagree, trust the system, say so,
-and offer to report it with `submit_documentation_feedback`. Ask the user first, because it
-sends their words to the Redpanda docs team.
+and offer to report it with `submit_documentation_feedback`. Ask the user first: it needs a
+signed-in Redpanda Cloud account and sends their words, with that account, to the Redpanda docs
+team.

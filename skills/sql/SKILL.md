@@ -41,11 +41,6 @@ the user has no role with *SQL: Access* or *SQL: Manage*: tell the user to assig
 `ALTER USER ... SUPERUSER` for an email-named user. The Cloud user sync owns `CONNECT` and
 superuser for those users and revokes a manual grant on its next pass.
 
-**Fix read access with external-source grants.** Reading a topic needs
-`GRANT SELECT ON EXTERNAL SOURCE <catalog> => '<topic or prefix*>'`, plus `USAGE` on the
-catalog's schema (`public`) to see catalogs. Kafka ACLs do not apply: SQL reads through the
-catalog's own credential.
-
 **Read the stored grants before any REVOKE.** `REVOKE` must name a stored pattern exactly. A
 pattern that matches no stored grant is an error, so a wildcard grant cannot be narrowed by
 revoking one topic under it. Look first:
@@ -59,11 +54,11 @@ FROM information_schema.role_table_grants WHERE grantee = '<email>';
 
 A catalog-wide grant (no pattern) shows up only in `role_table_grants`, with `table_name` set to
 the catalog name. To remove one topic from a wildcard grant, revoke the wildcard as stored, list
-the topics it covered with `SHOW REDPANDA TABLES`, and grant the ones that should stay. Revoking
-the catalog-wide grant also removes every per-topic grant on that catalog.
-
-**After a role is restored, check grants before re-running them.** Removing a SQL role
-revokes only `CONNECT`, so the user and its grants usually still exist.
+the topics it covered with `SHOW REDPANDA TABLES`, and grant the ones that should stay. Before
+you do, tell the user what changes and get their confirmation: per-topic grants cover only the
+topics that exist now, so topics created later that match the wildcard are no longer readable,
+and the user has no access to any covered topic between the `REVOKE` and the `GRANT`s. Run them
+together. Revoking the catalog-wide grant also removes every per-topic grant on that catalog.
 
 ## Use the docs for everything else
 

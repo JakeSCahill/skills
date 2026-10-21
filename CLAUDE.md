@@ -151,8 +151,11 @@ only that. A skill in this format has two sections:
    when the server is unavailable.
 
 Facts go in the docs, not the skill. When an eval shows the docs lack a fact or state it
-wrongly, the fix is a docs change. A thin `SKILL.md` is 60 to 100 lines, and `references/`
-holds only `SOURCES.md`. When a sync routine finds a user-facing change, it updates "How to
+wrongly, the fix is a docs change. A thin `SKILL.md` is as short as its proven procedures allow,
+and `references/` holds only `SOURCES.md`. A behavioral case counts only if it grades the outcome,
+its mocks answer every legitimate command, and the baseline still fails it. If no procedure for a
+product survives that test, the skill carries none and points at the docs; whether to keep such
+a skill at all is a maintainer decision. When a sync routine finds a user-facing change, it updates "How to
 work" only if the procedure changed.
 
 ## Maturity and PREVIEW markers

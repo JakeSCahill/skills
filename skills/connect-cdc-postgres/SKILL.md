@@ -16,16 +16,6 @@ license. The source is public: `internal/impl/postgresql/` in github.com/redpand
 
 ## How to work
 
-**Map the connector's objects from its `slot_name` first.** Everything it owns in PostgreSQL derives
-from that one name, so read it from the pipeline config (or match it in `pg_replication_slots`)
-before you touch the database:
-
-- the replication slot itself (`<slot_name>_tmp` exists only while a `stream_snapshot` is in flight)
-- the publication `pglog_stream_<slot_name>`
-- the heartbeat logical messages, prefix `redpanda_connect_<slot_name>`
-
-With several pipelines on one database, do this per pipeline and answer per slot.
-
 **Backfill with a signal, never by dropping the slot.** `stream_snapshot` runs only when the slot
 does not exist yet, so adding a table to `tables` and restarting streams its new changes but not its
 existing rows. Do not drop the slot to force a re-snapshot: that discards the stream position and

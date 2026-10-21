@@ -6,7 +6,7 @@
     {
       "id": "scale-broker-count-zone-multiple",
       "query": "My Redpanda Cloud BYOC cluster on AWS runs 3 brokers spread across 3 availability zones. Traffic is up a bit, so I want to add just one more broker through the Control Plane API by setting the broker count to 4. What request do I send, and will that work?",
-      "why": "Self-service BYOC scaling sets redpanda_node_count through a cluster PATCH, and on a multi-AZ cluster the count must be a multiple of the zone count, so 4 is rejected and the next step is 6. Models without the docs tend to claim the broker count cannot be set directly and that only the throughput tier changes size.",
+      "why": "Self-service BYOC scaling sets redpanda_node_count through a cluster PATCH, and on a multi-AZ cluster the count must be a multiple of the zone count, so 4 is rejected and the next step is 6. In the recorded baseline runs the model guessed the multiple-of-zones rule but did not know the redpanda_node_count field, and said cluster size is tied to the throughput tier.",
       "verified_against": [
         "https://docs.redpanda.com/cloud-data-platform/manage/cluster-maintenance/scale-cluster/"
       ],
@@ -80,31 +80,16 @@
       "origin": "docs-cited"
     },
     {
-      "id": "scale-paused-stockout",
-      "query": "I scaled out my Redpanda BYOC cluster on AWS through the Cloud API. Hours later the cluster still shows Upgrading, the long-running operation ended without the cluster going back to Ready, and every new scaling request I send is now rejected. What happened and how do I get out of this state?",
-      "why": "When the cloud provider cannot supply the requested machines (a stockout or quota limit), scaling pauses with the brokers provisioned so far, the cluster stays Upgrading, the operation times out, and further scaling requests are rejected until Redpanda Support resumes or rolls back the change. Without the docs, a model expects the agent to retry and recover on its own once capacity exists.",
-      "verified_against": [
-        "https://docs.redpanda.com/cloud-data-platform/manage/cluster-maintenance/scale-cluster/"
-      ],
-      "invariants": [
-        {
-          "name": "support_resumes_or_rolls_back",
-          "failure_condition": "Fails if the response says the cluster will usually recover or return to Ready on its own once capacity or quota is available, or that retrying the scaling request will clear the state, or treats Redpanda Support only as a last resort after waiting. Passes if it identifies a cloud provider capacity shortage or quota limit as the cause, says scaling is paused and further scaling requests are rejected, and says Redpanda Support must resume or roll back the change. Advising a quota increase before contacting Support is fine."
-        }
-      ],
-      "origin": "docs-cited"
-    },
-    {
       "id": "custom-properties-integers-as-strings",
       "query": "I'm creating a Redpanda Cloud BYOC cluster through the Control Plane API and want to set a few Redpanda cluster properties at create time under cluster_configuration.custom_properties, including some integer-valued ones like log_segment_size and a retention byte limit. How should I write those values in the JSON body?",
-      "why": "cluster_configuration.custom_properties is a protobuf Struct, and the API contract says integer and number properties must be sent as JSON strings to avoid precision loss. Without the skill, a model reasons from Struct semantics and tells the user to send plain JSON numbers and to avoid quoting them.",
+      "why": "cluster_configuration.custom_properties is a protobuf Struct, and the API contract in product source says integer and number properties are to be provided as JSON strings to avoid precision loss; the server parses those strings into the property's type. Product source also converts a bare JSON number, so a small value sent unquoted still lands, and the published examples show bare numbers, but only the string form is exact past 2^53, and nothing published says strings are accepted. In the recorded baseline runs the model reasoned from Struct semantics, told the user to send plain JSON numbers, and said quoted values might be rejected or should be avoided. Sampled from the full skill's references at commit b492f09; the thin skill no longer carries this claim, so the skill arm is expected to miss it.",
       "verified_against": [
         "product source"
       ],
       "invariants": [
         {
           "name": "integers_sent_as_strings",
-          "failure_condition": "Fails if the response tells the user to send integer-valued properties as unquoted JSON numbers, or says quoting them is wrong or optional. Passes if it says integer (and number) values in custom_properties must be sent as JSON strings, for example \"134217728\", and shows them quoted."
+          "failure_condition": "Fails if the response says quoted strings are wrong, rejected, or should be avoided for integer-valued properties, or offers them only as an untested fallback, or never says that the API takes integer and number values as JSON strings. Passes if it says the API contract has integer (and number) values in custom_properties sent as JSON strings, for example \"134217728\", which the server parses into the property's type, and shows them quoted. Also saying that plain numbers are accepted for values that fit exactly in a double is fine."
         }
       ],
       "origin": "sampled"
@@ -112,7 +97,7 @@
     {
       "id": "byovpc-dual-listener-public-subnets",
       "query": "We run a Redpanda BYOC cluster on a customer-managed VPC in AWS (BYOVPC), registered as a Network in Redpanda Cloud. We now want the cluster to serve an internet-facing Kafka listener alongside the private one. What has to change on the Network resource first, and can we adjust that setting again later?",
-      "why": "On an AWS BYOVPC network, a cluster that serves a public listener alongside the private one needs customer_managed_resources.aws.public_subnets on the Network, one public subnet per availability zone that has a broker subnet, and the field is write-once: it can be set on a network that has none but not changed or cleared afterwards. Without the skill, a model talks about a network connection_type, which does not exist, and says the cluster must be rebuilt.",
+      "why": "On an AWS BYOVPC network, a cluster that serves a public listener alongside the private one needs customer_managed_resources.aws.public_subnets on the Network, one public subnet per availability zone that has a broker subnet, and the field is write-once: it can be set on a network that has none but not changed or cleared afterwards. In the recorded baseline runs the model treated public exposure as a cluster connection-type setting, did not name the public_subnets field, and could not say whether the setting can change later. Sampled from the full skill's references at commit b492f09; the thin skill no longer carries this claim, so the skill arm is expected to miss it.",
       "verified_against": [
         "product source"
       ],
@@ -130,7 +115,7 @@
     {
       "id": "connect-pipeline-egress-allowlist",
       "query": "Our Redpanda Connect pipelines running on a Redpanda BYOC cluster need to reach a Postgres database at 10.5.0.0/16 on port 5432 and an internal API in 10.6.0.0/16 on ports 8000 through 8100, both in a peered VPC. How do I allow that outbound traffic for the pipelines through the Redpanda Cloud Control Plane API?",
-      "why": "Outbound destinations for Redpanda Connect pipelines are allowlisted on the cluster with redpanda_connect.allowed_destination_cidr_ports, settable on create and through a cluster PATCH. Each entry is a cidr with port_start and an optional port_end, where a port_end of 0 or omitted means a single port. Without the skill, a model admits it does not know the field and invents a placeholder shape.",
+      "why": "Outbound destinations for Redpanda Connect pipelines are allowlisted on the cluster with redpanda_connect.allowed_destination_cidr_ports, settable on create and through a cluster PATCH. Each entry is a cidr with port_start and an optional port_end, where a port_end of 0 or omitted means a single port. In the recorded baseline runs the model said it knew no API field for this, argued none is needed on BYOC, and sent the user to route tables and security group egress rules instead. Sampled from the full skill's references at commit b492f09; the thin skill no longer carries this claim, so the skill arm is expected to miss it.",
       "verified_against": [
         "product source"
       ],
@@ -149,7 +134,7 @@
     {
       "id": "shadow-sr-exact-context-mapping-scope",
       "query": "I'm setting up a Redpanda shadow link that replicates schemas from a Confluent Schema Registry over its HTTP API, and I want the source contexts .prod and .staging to land under different context names on the Redpanda side. Are there any gotchas with that explicit context mapping?",
-      "why": "In Schema Registry API-mode shadowing, an exact context mapping requires every source context in the effective source scope to have exactly one mapping, so source_filter.contexts must be scoped to the mapped contexts. Leaving the filter empty puts the whole registry, including the default context, in scope. Without the skill, a model doubts that shadow links can read a Confluent registry at all and gives generic schema migration advice.",
+      "why": "In Schema Registry API-mode shadowing, an exact context mapping requires every source context in the effective source scope to have exactly one mapping, so source_filter.contexts must be scoped to the mapped contexts. Leaving the filter empty puts the whole registry, including the default context, in scope. In the recorded baseline runs the model declined to name the config fields and listed generic things to test, treating what happens to unmapped contexts as an open question. Sampled from the full skill's references at commit b492f09; the thin skill no longer carries this claim, so the skill arm is expected to miss it.",
       "verified_against": [
         "https://github.com/redpanda-data/redpanda/blob/dev/proto/redpanda/core/admin/v2/shadow_link.proto"
       ],
@@ -164,7 +149,7 @@
     {
       "id": "tags-patch-echo-reserved-keys",
       "query": "My automation does read-modify-write on a Redpanda BYOC cluster's cloud_provider_tags through the Cloud API: it GETs the cluster, edits the tag map, and PATCHes it back. The map it reads includes keys Redpanda put there, like redpanda-id and redpanda-org. Do I need to strip those keys before sending the PATCH, or will it be rejected?",
-      "why": "A cloud_provider_tags PATCH is checked against the tags the cluster already stores: it is rejected only when it introduces a reserved key or changes a stored reserved key's value, so echoing redpanda-id or redpanda-org back unchanged is accepted, as is leaving them out. Without the skill, a model tells the user to strip every redpanda-prefixed key to avoid a rejection.",
+      "why": "A cloud_provider_tags PATCH is checked against the tags the cluster already stores: product source rejects it only when it introduces a reserved key or changes a stored reserved key's value, so echoing redpanda-id or redpanda-org back unchanged is accepted, as is leaving them out. In the recorded baseline runs the model said acceptance and rejection were equally plausible and suggested testing on a non-production cluster. The published Reserved tag keys section says Redpanda rejects these keys when you update tags with the Control Plane API, without the stored-value exception, so the docs conflict with product source here; a docs-arm failure on this case reflects that conflict, not a skill win.",
       "verified_against": [
         "product source"
       ],
@@ -179,7 +164,7 @@
     {
       "id": "byoc-plugin-skip-version-check",
       "query": "Our CI runners cannot download binaries from the internet, so we bake the Redpanda BYOC plugin into the runner image ahead of time. How do I stop rpk cloud byoc aws apply from trying to download or re-verify a plugin version for the cluster, and is there any catch?",
-      "why": "rpk pins the BYOC plugin to the version the control plane names for the cluster and downloads it when the checksum does not match. Setting RPK_CLOUD_SKIP_VERSION_CHECK to 1 or true makes rpk run the installed plugin as is, but only when a plugin is already installed; with no plugin present, rpk still fetches one. Without the skill, a model invents a --no-validate flag.",
+      "why": "rpk pins the BYOC plugin to the version the control plane names for the cluster and downloads it when the checksum does not match. Setting RPK_CLOUD_SKIP_VERSION_CHECK to 1 or true makes rpk run the installed plugin as is, but only when a plugin is already installed; with no plugin present, rpk still fetches one. In the recorded baseline runs the model said it could not name the setting and told the user to look for a flag in --help.",
       "verified_against": [
         "product source"
       ],
@@ -197,7 +182,7 @@
     {
       "id": "byoc-validate-without-cluster-id",
       "query": "Before we create any cluster in Redpanda Cloud, can I check whether our AWS account meets the BYOC prerequisites using rpk? We don't have a cluster ID yet.",
-      "why": "rpk cloud byoc aws validate is the one BYOC subcommand that needs no --redpanda-id; with no cluster to pin to, rpk downloads the latest BYOC plugin to run it. Without the skill, a model says every rpk BYOC command needs a cluster ID and suggests creating a placeholder cluster.",
+      "why": "rpk cloud byoc aws validate is the one BYOC subcommand that needs no --redpanda-id; with no cluster to pin to, rpk downloads the latest BYOC plugin to run it. In the recorded baseline runs the model said the BYOC commands are tied to a cluster ID, knew of no cluster-agnostic preflight, and offered manual AWS checks instead.",
       "verified_against": [
         "product source"
       ],
@@ -215,7 +200,7 @@
     {
       "id": "dual-listener-no-way-back",
       "query": "A while ago we switched our AWS BYOC cluster to the per-service connections lists (a public and a private listener on the Kafka API, HTTP Proxy, and Schema Registry) through the Redpanda Cloud API. Now we want to undo that and put the cluster back on the plain cluster-level connection_type setting it had before. What API call do I send?",
-      "why": "Once a cluster uses per-service connections, there is no path back to connection_type: connection_type is not an updatable field, a connections list cannot be cleared, and each service must keep at least one connection. The closest equivalent is to keep connections with only the topology you want. Without the skill, a model cannot say whether a revert is possible and asks for the API spec.",
+      "why": "Once a cluster uses per-service connections, there is no path back to connection_type: connection_type is not an updatable field, a connections list cannot be cleared, and each service must keep at least one connection. The closest equivalent is to keep connections with only the topology you want. In the recorded baseline runs the model floated a PATCH that sets connection_type and clears the connections lists as the likely revert, or only guessed that a revert might not be supported.",
       "verified_against": [
         "product source"
       ],
@@ -226,254 +211,6 @@
         }
       ],
       "origin": "targeted"
-    },
-    {
-      "id": "scale-check-zones-before-patch",
-      "query": "Our Redpanda BYOC cluster d1abc2defg3hij4klm5n needs a little more headroom. Add one more broker to it through the Cloud API. Go ahead and make the change.",
-      "why": "On a multi-zone cluster the broker count must be a multiple of the zone count, so before a scaling PATCH the agent reads the cluster's zones and node count and does not send a count the API will refuse. Here the cluster has 3 brokers in 3 zones, so one more broker (4) is invalid and the agent should stop and offer 6. Without the skill, a model PATCHes redpanda_node_count to 4.",
-      "verified_against": [
-        "https://docs.redpanda.com/cloud-data-platform/manage/cluster-maintenance/scale-cluster/"
-      ],
-      "origin": "behavioral",
-      "tools": {
-        "mock": [
-          {
-            "name": "cloud_api",
-            "description": "Send an authenticated request to the Redpanda Cloud Control Plane API at https://api.redpanda.com and return the JSON response. Use this for every Control Plane API call.",
-            "input_schema": {
-              "type": "object",
-              "properties": {
-                "method": {
-                  "type": "string",
-                  "enum": [
-                    "GET",
-                    "POST",
-                    "PATCH",
-                    "DELETE"
-                  ]
-                },
-                "path": {
-                  "type": "string",
-                  "description": "Request path and query string, for example /v1/clusters/{id}"
-                },
-                "body": {
-                  "type": "object",
-                  "description": "JSON request body, if any"
-                }
-              },
-              "required": [
-                "method",
-                "path"
-              ]
-            },
-            "responses": [
-              {
-                "match": "^(?=.*\"PATCH\")(?=.*redpanda_node_count\\\\?\"\\s*:\\s*\\\\?\"?[45]\\b)",
-                "output": "{\n  \"code\": \"invalid_argument\",\n  \"message\": \"node count 4 must be a multiple of the cluster's 3 zones\",\n  \"details\": [\n    {\n      \"type\": \"google.rpc.ErrorInfo\",\n      \"debug\": {\n        \"reason\": \"REASON_SCALING_REDPANDA_NODE_COUNT_NOT_ZONE_MULTIPLE\",\n        \"domain\": \"redpanda.com/controlplane\"\n      }\n    }\n  ]\n}"
-              },
-              {
-                "match": "^(?=.*\"PATCH\")(?=.*/v1/clusters/d1abc2defg3hij4klm5n)",
-                "output": "{\n  \"operation\": {\n    \"id\": \"sop3c4d5e6f7g8h9i0j1\",\n    \"metadata\": {\n      \"@type\": \"type.googleapis.com/redpanda.api.controlplane.v1.UpdateClusterMetadata\",\n      \"cluster_id\": \"d1abc2defg3hij4klm5n\"\n    },\n    \"state\": \"STATE_IN_PROGRESS\",\n    \"started_at\": \"2026-10-21T09:12:44Z\",\n    \"type\": \"TYPE_UPDATE_CLUSTER\",\n    \"resource_id\": \"d1abc2defg3hij4klm5n\"\n  }\n}"
-              },
-              {
-                "match": "/v1/operations/sop3c4d5e6f7g8h9i0j1",
-                "output": "{\n  \"operation\": {\n    \"id\": \"sop3c4d5e6f7g8h9i0j1\",\n    \"metadata\": {\n      \"@type\": \"type.googleapis.com/redpanda.api.controlplane.v1.UpdateClusterMetadata\",\n      \"cluster_id\": \"d1abc2defg3hij4klm5n\"\n    },\n    \"state\": \"STATE_IN_PROGRESS\",\n    \"started_at\": \"2026-10-21T09:12:44Z\",\n    \"type\": \"TYPE_UPDATE_CLUSTER\",\n    \"resource_id\": \"d1abc2defg3hij4klm5n\"\n  }\n}"
-              },
-              {
-                "match": "/v1/clusters/d1abc2defg3hij4klm5n",
-                "output": "{\n  \"cluster\": {\n    \"id\": \"d1abc2defg3hij4klm5n\",\n    \"name\": \"payments-prod\",\n    \"type\": \"TYPE_BYOC\",\n    \"cloud_provider\": \"CLOUD_PROVIDER_AWS\",\n    \"region\": \"us-east-1\",\n    \"zones\": [\n      \"use1-az1\",\n      \"use1-az2\",\n      \"use1-az4\"\n    ],\n    \"throughput_tier\": \"tier-2-aws-v3-arm\",\n    \"redpanda_node_count\": 3,\n    \"network_id\": \"cs6op7qrstu8v9a0b1c2\",\n    \"resource_group_id\": \"b0c1d2e3f4g5h6i7j8k9\",\n    \"state\": \"STATE_READY\",\n    \"current_redpanda_version\": \"v26.2.5\",\n    \"cloud_provider_tags\": {\n      \"cost-center\": \"cc-4410\",\n      \"env\": \"prod\",\n      \"owner\": \"data-platform\",\n      \"redpanda-id\": \"d1abc2defg3hij4klm5n\",\n      \"redpanda-org\": \"a9b8c7d6e5f4g3h2i1j0\"\n    },\n    \"created_at\": \"2026-03-02T14:20:11Z\"\n  }\n}"
-              },
-              {
-                "match": "/v1/regions",
-                "output": "{\"code\": \"permission_denied\", \"message\": \"regions lookup is not needed for this request\"}"
-              }
-            ]
-          }
-        ],
-        "expected_calls": [
-          {
-            "tool": "cloud_api",
-            "args": "^(?=.*\"GET\")(?=.*/v1/clusters/d1abc2defg3hij4klm5n)"
-          }
-        ],
-        "forbidden_calls": [
-          {
-            "tool": "cloud_api",
-            "args": "^(?=.*\"PATCH\")(?=.*redpanda_node_count\\\\?\"\\s*:\\s*\\\\?\"?[45]\\b)"
-          }
-        ]
-      }
-    },
-    {
-      "id": "validate-before-any-cluster",
-      "query": "We haven't created anything in Redpanda Cloud yet. Before we do, check whether our AWS account meets the BYOC prerequisites. Use the tools.",
-      "why": "rpk cloud byoc aws validate is the one BYOC plugin subcommand that runs without --redpanda-id, downloading the latest plugin, so prerequisites can be checked before any cluster exists. Without the skill, a model creates a cluster or network to get an ID, or checks IAM and quotas by hand with the AWS CLI.",
-      "verified_against": [
-        "product source"
-      ],
-      "origin": "behavioral",
-      "tools": {
-        "mock": [
-          {
-            "name": "cloud_api",
-            "description": "Send an authenticated request to the Redpanda Cloud Control Plane API at https://api.redpanda.com and return the JSON response. Use this for every Control Plane API call.",
-            "input_schema": {
-              "type": "object",
-              "properties": {
-                "method": {
-                  "type": "string",
-                  "enum": [
-                    "GET",
-                    "POST",
-                    "PATCH",
-                    "DELETE"
-                  ]
-                },
-                "path": {
-                  "type": "string",
-                  "description": "Request path and query string, for example /v1/clusters/{id}"
-                },
-                "body": {
-                  "type": "object",
-                  "description": "JSON request body, if any"
-                }
-              },
-              "required": [
-                "method",
-                "path"
-              ]
-            },
-            "responses": [
-              {
-                "match": "\"POST\"",
-                "output": "{\n  \"operation\": {\n    \"id\": \"cop4d5e6f7g8h9i0j1k2\",\n    \"metadata\": {\n      \"@type\": \"type.googleapis.com/redpanda.api.controlplane.v1.CreateClusterMetadata\",\n      \"cluster_id\": \"d1abc2defg3hij4klm5n\"\n    },\n    \"state\": \"STATE_IN_PROGRESS\",\n    \"started_at\": \"2026-10-21T09:12:44Z\",\n    \"type\": \"TYPE_CREATE_CLUSTER\",\n    \"resource_id\": \"d1abc2defg3hij4klm5n\"\n  }\n}"
-              },
-              {
-                "match": "/v1/regions",
-                "output": "{\"regions\": []}"
-              },
-              {
-                "match": ".",
-                "output": "{\"clusters\": [], \"networks\": [], \"next_page_token\": \"\"}"
-              }
-            ]
-          },
-          {
-            "name": "run_shell",
-            "description": "Run a shell command on the operator's workstation. rpk is installed and logged in to Redpanda Cloud, and the shell has credentials for the AWS account that hosts the BYOC cluster. Control Plane API calls go through cloud_api, not this tool.",
-            "input_schema": {
-              "type": "object",
-              "properties": {
-                "command": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "command"
-              ]
-            },
-            "responses": [
-              {
-                "match": "byoc\\s+aws\\s+validate",
-                "output": "Validating AWS account 381492337710 for Redpanda BYOC...\n[PASS] caller identity resolved\n[PASS] IAM permissions for agent provisioning\n[PASS] service quota: Running On-Demand Standard instances\n[PASS] S3 access\nValidation succeeded."
-              },
-              {
-                "match": "--help|\\bhelp\\b",
-                "output": "Manage a Redpanda cloud BYOC agent\n\nUsage:\n  rpk cloud byoc [command] [flags]\n\nAvailable Commands:\n  aws         Manage AWS BYOC agent\n  azure       Manage Azure BYOC agent\n  gcp         Manage GCP BYOC agent\n  install     Install the BYOC plugin\n  uninstall   Uninstall the BYOC plugin\n"
-              },
-              {
-                "match": "aws\\s+sts",
-                "output": "{\n  \"UserId\": \"AIDAVQ2EXAMPLE\",\n  \"Account\": \"381492337710\",\n  \"Arn\": \"arn:aws:iam::381492337710:user/platform-admin\"\n}"
-              },
-              {
-                "match": "rpk\\s+version",
-                "output": "Version:     v26.2.5\nOS/Arch:     darwin/arm64"
-              }
-            ]
-          }
-        ],
-        "expected_calls": [
-          {
-            "tool": "run_shell",
-            "args": "byoc\\s+aws\\s+validate"
-          }
-        ],
-        "forbidden_calls": [
-          {
-            "tool": "cloud_api",
-            "args": "\"POST\""
-          }
-        ]
-      }
-    },
-    {
-      "id": "custom-properties-patch-quotes-integers",
-      "query": "On our Redpanda BYOC cluster d1abc2defg3hij4klm5n, set the cluster property log_retention_ms to 259200000 and turn on audit_enabled, through the Cloud Control Plane API. Go ahead and send the change.",
-      "why": "cluster_configuration.custom_properties is a protobuf Struct, and the API contract says integer and number properties must be sent as JSON strings to avoid precision loss, while booleans are sent as booleans. Without the skill, a model sends log_retention_ms as a bare JSON number.",
-      "verified_against": [
-        "product source"
-      ],
-      "origin": "behavioral",
-      "tools": {
-        "mock": [
-          {
-            "name": "cloud_api",
-            "description": "Send an authenticated request to the Redpanda Cloud Control Plane API at https://api.redpanda.com and return the JSON response. Use this for every Control Plane API call.",
-            "input_schema": {
-              "type": "object",
-              "properties": {
-                "method": {
-                  "type": "string",
-                  "enum": [
-                    "GET",
-                    "POST",
-                    "PATCH",
-                    "DELETE"
-                  ]
-                },
-                "path": {
-                  "type": "string",
-                  "description": "Request path and query string, for example /v1/clusters/{id}"
-                },
-                "body": {
-                  "type": "object",
-                  "description": "JSON request body, if any"
-                }
-              },
-              "required": [
-                "method",
-                "path"
-              ]
-            },
-            "responses": [
-              {
-                "match": "^(?=.*\"PATCH\")(?=.*/v1/clusters/d1abc2defg3hij4klm5n)",
-                "output": "{\n  \"operation\": {\n    \"id\": \"uop2b3c4d5e6f7g8h9i0\",\n    \"metadata\": {\n      \"@type\": \"type.googleapis.com/redpanda.api.controlplane.v1.UpdateClusterMetadata\",\n      \"cluster_id\": \"d1abc2defg3hij4klm5n\"\n    },\n    \"state\": \"STATE_IN_PROGRESS\",\n    \"started_at\": \"2026-10-21T09:12:44Z\",\n    \"type\": \"TYPE_UPDATE_CLUSTER\",\n    \"resource_id\": \"d1abc2defg3hij4klm5n\"\n  }\n}"
-              },
-              {
-                "match": "/v1/operations/uop2b3c4d5e6f7g8h9i0",
-                "output": "{\n  \"operation\": {\n    \"id\": \"uop2b3c4d5e6f7g8h9i0\",\n    \"metadata\": {\n      \"@type\": \"type.googleapis.com/redpanda.api.controlplane.v1.UpdateClusterMetadata\",\n      \"cluster_id\": \"d1abc2defg3hij4klm5n\"\n    },\n    \"state\": \"STATE_COMPLETED\",\n    \"started_at\": \"2026-10-21T09:12:44Z\",\n    \"type\": \"TYPE_UPDATE_CLUSTER\",\n    \"resource_id\": \"d1abc2defg3hij4klm5n\"\n  }\n}"
-              },
-              {
-                "match": "/v1/clusters/d1abc2defg3hij4klm5n",
-                "output": "{\n  \"cluster\": {\n    \"id\": \"d1abc2defg3hij4klm5n\",\n    \"name\": \"payments-prod\",\n    \"type\": \"TYPE_BYOC\",\n    \"cloud_provider\": \"CLOUD_PROVIDER_AWS\",\n    \"region\": \"us-east-1\",\n    \"zones\": [\n      \"use1-az1\",\n      \"use1-az2\",\n      \"use1-az4\"\n    ],\n    \"throughput_tier\": \"tier-2-aws-v3-arm\",\n    \"redpanda_node_count\": 3,\n    \"network_id\": \"cs6op7qrstu8v9a0b1c2\",\n    \"resource_group_id\": \"b0c1d2e3f4g5h6i7j8k9\",\n    \"state\": \"STATE_READY\",\n    \"current_redpanda_version\": \"v26.2.5\",\n    \"cloud_provider_tags\": {\n      \"cost-center\": \"cc-4410\",\n      \"env\": \"prod\",\n      \"owner\": \"data-platform\",\n      \"redpanda-id\": \"d1abc2defg3hij4klm5n\",\n      \"redpanda-org\": \"a9b8c7d6e5f4g3h2i1j0\"\n    },\n    \"created_at\": \"2026-03-02T14:20:11Z\"\n  }\n}"
-              }
-            ]
-          }
-        ],
-        "expected_calls": [
-          {
-            "tool": "cloud_api",
-            "args": "^(?=.*\"PATCH\")(?=.*log_retention_ms\\\\?\"\\s*:\\s*\\\\?\"259200000)"
-          }
-        ],
-        "forbidden_calls": [
-          {
-            "tool": "cloud_api",
-            "args": "^(?=.*\"PATCH\")(?=.*log_retention_ms\\\\?\"\\s*:\\s*259200000)"
-          }
-        ]
-      }
     }
   ]
 }
