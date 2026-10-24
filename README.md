@@ -25,6 +25,16 @@ Once installed, invoke any skill with its `/redpanda:<skill>` name (e.g.
 `/redpanda:streaming`). Each skill's `SKILL.md` frontmatter `description` tells the agent
 when to load it automatically.
 
+### Keep the skills up to date
+
+The skills change as the products do. Claude Code doesn't auto-update plugins from this
+marketplace unless you turn it on: run `/plugin`, open the **Marketplaces** tab, select
+`redpanda-skills`, and select **Enable auto-update**. To update by hand:
+
+```bash
+claude plugin marketplace update redpanda-skills && claude plugin update redpanda@redpanda-skills
+```
+
 ## What is this?
 
 This repo is a Claude Code **plugin** named `redpanda`. When installed, every skill is
