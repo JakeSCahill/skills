@@ -23,7 +23,7 @@ Each case gets a verdict from its pass rates:
 |---|---|
 | incomplete | More than one run in some arm errored or was not graded, or none was scored. Rerun the case. |
 | uninformative | The baseline passes it. A model already knows the answer, so the case says nothing about the skill or the docs. Rewrite or delete it. |
-| skill adds value (docs gap) | `both` beats `docs` by at least a third. The skill carries something the docs do not. |
+| skill adds value (docs gap) | `both` beats `docs` by more than a third. The skill carries something the docs do not. |
 | docs are enough | `docs` passes at least two thirds of the time and is within 10 points of `both`. |
 | neither answers reliably | Both docs arms pass less than two thirds of the time. Check the case before blaming the skill or the docs. |
 | no clear difference | Anything else. Run more repeats. |
