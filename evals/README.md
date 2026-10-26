@@ -21,6 +21,7 @@ Each case gets a verdict from its pass rates:
 
 | Verdict | Means |
 |---|---|
+| incomplete | More than one run in some arm errored or was not graded, or none was scored. Rerun the case. |
 | uninformative | The baseline passes it. A model already knows the answer, so the case says nothing about the skill or the docs. Rewrite or delete it. |
 | skill adds value (docs gap) | `both` beats `docs` by at least a third. The skill carries something the docs do not. |
 | docs are enough | `docs` passes at least two thirds of the time and is within 10 points of `both`. |
@@ -73,9 +74,12 @@ node evals/run-evals.mjs --arms both --runs 1
 ```
 
 Options: `--arms`, `--runs`, `--concurrency` (default 4), `--model` (default
-`claude-sonnet-5-5`), `--judge-model` (default `claude-opus-5-5`), `--no-judge`, `--out`.
+`claude-sonnet-5-5`), `--judge-model` (default `claude-opus-5-5`), `--no-judge` (answers that need the
+judge are recorded as `ungraded`, not passed), `--out`.
 Results go to `evals/results/<timestamp>/`: `runs.jsonl` has every response and tool call,
 `summary.md` has the tables.
+
+The scoring rules have tests that cost nothing to run: `node --test evals/run-evals.test.mjs`.
 
 A case run costs roughly $0.03 (baseline) to $0.21 (both), and `runs.jsonl` records each run's tokens. The skill arms preload SKILL.md and every reference file it names, so they overstate what an installed skill costs a user, which loads references only as needed.
 
