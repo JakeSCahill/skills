@@ -61,11 +61,9 @@ The UI takes and shows budget amounts in **dollars**, and cost reporting and CSV
 
 In the UI, open **Cost and usage** in the sidebar. Every LLM call routed through the gateway is recorded and priced automatically (input, output, and cached tokens; cost; request count; provider, model, user, agent context). Prices come from the built-in per-model catalog or per-provider overrides (`rpk ai llm-provider create/update --pricing`, see [gateway-and-providers.md](gateway-and-providers.md)). Pricing is resolved per provider and model, so a call is priced with the rates of the provider that served it, and the same model offered by two providers is priced separately for each. Cost reporting works with no pricing setup at all.
 
-The **Cost & usage** tab offers a UTC time window (written to the URL, every figure compared with the equal-length previous period), headline spend, request, cost-per-1k and token figures, per-resource spend charts, a CSV export of the table as shown or of every row, and a **Spend breakdown** grouped by **Agents**, **Models**, **Providers**, **Users** or **Tags**.
+The **Cost & usage** tab shows spend, requests and tokens for a UTC time window, compared with the previous period of the same length, and a **Spend breakdown** by **Agents**, **Models**, **Providers**, **Users** or **Tags**, with CSV export.
 
 On the **Models** tab a row is **one model as served by one provider**, not the model on its own: it names the model and the service that served it, with the provider the call went through and the exact recorded model identifier underneath. A model you reach through two providers gets a row for each, so duplicate-looking model rows are per-route costs rather than a bug, and a call whose provider details were not recorded keeps its row and says the provider configuration is unknown. Filtering spend by a model covers every dated version of it, not only the newest; a name that differs by more than a trailing date stays separate (`gpt-4o-mini` is its own model, as is each regional version of a model served through Amazon Bedrock), and because the breakdown lists each exact recorded identifier, a charted model's spend can exceed the row you charted it from. Synthetic rows: *Direct usage* (calls not made through an agent), *Unattributed* (no user recorded), *Untagged* (no value for the chosen tag key), and *Deleted provider* rows that keep history complete.
-
-The **Activity** tab shows the agents active right now.
 
 ### Cost-allocation tags
 
@@ -223,7 +221,7 @@ ADP enforces fine-grained permissions: every operation checks exactly one permis
 | Writer, Reader | Nothing in ADP. They keep their control-plane and Kafka permissions, so a Writer can manage clusters and topics and still gets permission denied from every agent, MCP server, and LLM provider operation |
 | The Kafka and Schema Registry roles | Nothing in ADP |
 
-There are no built-in invoker or transcript-reader roles for ADP. Grant runtime-only or read-only access with an access policy. Organizations created before that change may still carry legacy invoker and transcript-reader roles; don't build new grants on them. A **custom role** holding ADP permissions still works, for when you need a permission bundle bound at a control-plane scope. Until access policies are enabled for an organization, Admin or a custom role is the only way to reach ADP.
+There are no built-in invoker or transcript-reader roles for ADP. Grant runtime-only or read-only access with an access policy. Older organizations may still carry legacy invoker and transcript-reader roles; don't build new grants on them. A **custom role** holding ADP permissions still works, for when you need a permission bundle bound at a control-plane scope. Until access policies are enabled for an organization, Admin or a custom role is the only way to reach ADP.
 
 **Permission families.** The full list with the operation each one gates is in the ADP roles and permissions reference.
 
@@ -257,7 +255,7 @@ Points worth knowing:
 - Redpanda compiles role bindings into permits automatically, so they take part in the same evaluation as your policies. The **Roles** and **System policies** tabs show them read-only.
 - **Templates** (**Access** → **Templates**) fix an action set and effect; a policy links a template and supplies the principal and scope. Built-in templates: *Read only*, *Sandboxed*, *Standard*, *Full access* (each a superset of the previous; all grant transcript and session reads). Built-ins can't be edited; a template is a live link, so editing one changes every linked policy.
 - Built-in, read-only managed policies: *Owner lifecycle*, *Self-service OAuth connections* (users manage their own connections), and *Agent capability ceiling* (agents can never mint credentials or control OAuth clients, providers, DCR settings, or the token vault). *Owner lifecycle* lets a user get, update and delete the agents, MCP servers, LLM providers, guardrails, budgets and secrets **they** created, update the triggers they created, list and manage their own API keys, and **invoke** an agent or an LLM provider they created. It stops short of creates — a create authorizes a payload that records no creator yet — and of agent credentials and sessions, which record no creator at all.
-- **No policy is created for a new agent.** An agent created before Agentic Data Plane began asking for this decision carries an editable `Agent grant: <agent-name>` policy covering MCP session access, LLM invocation and agent-to-agent calls. It is a starting point, not a managed policy, so you can edit or delete it, and a deleted grant is not recreated. An agent created now gets no such policy and needs one bound to it — see [Give a new agent access](#give-a-new-agent-access).
+- **No policy is created for a new agent**; bind one (see [Give a new agent access](#give-a-new-agent-access)). An older agent may carry an editable `Agent grant: <agent-name>` policy, which isn't recreated once deleted.
 
 ## Secrets
 
@@ -312,7 +310,7 @@ In the UI, the **Configuration** tab shows the composed effect for one tool acro
 
 **A mask hides values, not which records hold them.** On a server that also exposes its data as read-only SQL tables, a caller who can run `execute_query` can filter on a masked column the table declares filterable, and whether rows come back tells them whether that value exists. To stop that, deny `McpServerTool.call` on `execute_query` for those callers with [the single-tool Cedar form](#deny-one-tool-on-one-mcp-server), keeping the `when` clause that pins the server, or the deny covers every server with a tool of that name. See [mcp-servers.md](mcp-servers.md#sql-table-exposure-on-a-managed-connector).
 
-Other limits: on legacy SSE self-managed servers, calls matching a policy with response rules are denied. A *Not enforced here* badge means rules save but don't apply on that gateway. The audit log records each matching data policy as Blocked, Masked, or Passed.
+Other limits: on legacy SSE self-managed servers, calls that match a policy with response rules are denied. A *Not enforced here* badge means rules save but don't apply on that gateway. The audit log records each matching data policy as Blocked, Masked, or Passed.
 
 ## OAuth and identity
 
@@ -349,13 +347,7 @@ Admission modes: `open` (anonymous registration, still rate-limited and capped) 
 
 **Client ID Metadata Documents (CIMD)** — **UI only** (no CLI command): **Integrations setup** → **Inbound clients** → **Self-registration** → *Accept client metadata documents (CIMD)*. The client's `client_id` is an HTTPS URL hosting a JSON metadata document; nothing is persisted and the client does not appear in the client list.
 
-| Setting | Behavior |
-|---|---|
-| *Accept client metadata documents (CIMD)* | On/off. Off: URL `client_id`s are refused and discovery metadata doesn't advertise support. |
-| *Trusted document domains* | *Any domain* or *Only these domains*. A listed domain also covers its subdomains; bare public suffixes are rejected. |
-| *Allowed resources* | MCP URLs CIMD clients may request tokens for, or any MCP server on the gateway. Turning CIMD on seeds "any"; the UI refuses to save an empty list. |
-
-CIMD works only when **all three** hold: the switch is on, *Allowed resources* is non-empty (a stored empty list behaves exactly like off: no advertisement, URL client IDs refused, DCR fallback preserved), and the gateway can fetch metadata documents. If the settings show *Not active on this gateway*, the last condition fails and only the gateway operator can fix it. Allowed-resources matching is exact: copy each URL from the server's **Connection** tab, drop trailing slashes, and list a code-mode server's `Code mode URL` separately (see [mcp-servers.md](mcp-servers.md)). Because CIMD clients are admitted with no admin seeing them, prefer *Only these domains* and keep *Allowed resources* narrow.
+Its settings are *Trusted document domains* (*Any domain*, or *Only these domains*, which also covers subdomains) and *Allowed resources* (the MCP URLs CIMD clients may request tokens for, or any MCP server on the gateway). **Turning CIMD on sets *Allowed resources* to any server**, so narrow it right away. CIMD works only when the switch is on, *Allowed resources* isn't empty, and the gateway can fetch metadata documents; *Not active on this gateway* means the last condition fails, which only the gateway operator can fix. Resource matching is exact: copy each URL from the server's **Connection** tab, drop trailing slashes, and list a code-mode URL separately. Because CIMD admits clients no admin sees, prefer *Only these domains* and keep *Allowed resources* narrow.
 
 ### OAuth providers (outbound)
 
@@ -367,19 +359,12 @@ User-configured settings: name (positional, immutable), display name, authorizat
 
 *Discover from MCP server URL* (CLI `--register-from-url`) points Redpanda at a remote MCP server and lets it work out the upstream OAuth setup. Registering this gateway as a client with the upstream authorization server follows a ladder, in order:
 
-1. **Credentials you supply** — the client ID and client-secret reference you enter yourself.
-2. **Client ID Metadata Documents (CIMD)**, where the upstream authorization server advertises support. The gateway identifies itself by the HTTPS URL of a metadata document it publishes about itself; that URL *is* the `client_id`. Nothing is registered upstream, which is why this rung is tried before DCR.
-3. **Dynamic Client Registration (RFC 7591)**, where the upstream offers a registration endpoint.
-4. **Manual setup** — you register the client with the upstream yourself and enter its credentials.
+1. **Credentials you supply** (a client ID and client-secret reference).
+2. **CIMD**, where the upstream advertises it: the gateway's `client_id` is the HTTPS URL of a metadata document it publishes, so nothing is registered upstream.
+3. **DCR (RFC 7591)**, where the upstream offers a registration endpoint.
+4. **Manual setup**: you register with the upstream yourself.
 
-What follows from that:
-
-- An upstream whose OAuth setup supports **only** CIMD, with no DCR, connects through this same discovery flow; it does not need manual setup.
-- A CIMD `client_id` is a public document URL, not a secret. It is the identity the upstream vendor sees, so it is the value to hand over for an allowlist, and the URL to open when an authorization request is rejected. Discovery reports it.
-- CIMD needs this deployment to know its own external HTTPS address. Where it cannot, discovery falls back to the DCR rung.
-- `rpk ai oauth-provider get <name> -o yaml` marks a provider admitted on the CIMD rung with `cimd_client: true`. It is set by the system at creation and is not a field you write. Such a provider holds no client registration at the upstream authorization server.
-
-This is the **outbound** direction. The separate inbound setting that admits *other* clients to this gateway by metadata document is [above](#inbound-client-registration-dcr-and-cimd); the two are independent.
+So a CIMD-only upstream still connects through discovery. A CIMD `client_id` is a public URL, not a secret, and it's the value to give the upstream vendor for an allowlist. Where the deployment doesn't know its own external HTTPS address, discovery falls back to DCR. `rpk ai oauth-provider get <name> -o yaml` marks such a provider `cimd_client: true` (system-set). This outbound flow is independent of the [inbound](#inbound-client-registration-dcr-and-cimd) setting.
 
 #### Slack: whose identity the connection acts as (`slack_token_type`)
 
