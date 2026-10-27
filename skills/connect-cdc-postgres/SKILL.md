@@ -48,6 +48,9 @@ A table that already finished is skipped. To read it again, point
 `incremental_snapshot.checkpoint_cache_key` at a fresh key or clear that entry in the checkpoint
 cache; the signal payload has no force option.
 
+**Choose `batch_transactions` or a `batching` policy, never both.** The input rejects the
+combination at startup.
+
 ## Use the docs for everything else
 
 For config fields, defaults, metadata keys, signal table columns, PostgreSQL setup, and cloud

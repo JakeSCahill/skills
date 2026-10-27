@@ -20,9 +20,13 @@ Every create, update, and delete returns a long-running operation; poll
 
 ## How to work
 
-No BYOC-specific procedure has yet proven to change an agent's outcome over the docs
-alone, so this skill carries none. Follow `/redpanda:redpanda-docs`, and confirm with the user
-before any change that deletes, scales, or reconfigures a cluster or its Network.
+**Create a BYOVNet cluster on Azure with Terraform alone.** Use the Redpanda BYOVNet module and
+the Redpanda Terraform provider in one configuration, as in
+https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/byoc/azure/vnet-azure/.
+Do not call the Cloud API or run `rpk cloud byoc azure apply` to create it.
+
+Otherwise follow `/redpanda:redpanda-docs`, and confirm with the user before any change that
+deletes, scales, or reconfigures a cluster or its Network.
 
 ## Use the docs for everything else
 

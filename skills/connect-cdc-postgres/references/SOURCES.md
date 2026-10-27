@@ -27,6 +27,7 @@ https://docs.redpanda.com/connect/components/inputs/postgres_cdc/. Read source w
 | `REPLICA IDENTITY FULL` for TOASTable columns during a backfill | `pglogicalstream/incremental_snapshot.go` (`warnToastFidelity`) |
 | Re-read a finished table by changing or clearing `checkpoint_cache_key` | `input_pg_stream.go` (`incremental_snapshot.checkpoint_cache_key` and `signal_table_name` descriptions) |
 | Heartbeat prefix `redpanda_connect_<slot_name>` (`pg_logical_emit_message`) | `pglogicalstream/logical_stream.go` (`prefix := "redpanda_connect_" + stream.slotName`, `newHeartbeat(..., `{"type":"heartbeat"}`, stream.incSnapshot.backfilling.Load)`), `pglogicalstream/heartbeat.go` (`run`) |
+| `batch_transactions` cannot be combined with a `batching` policy; rejected at startup (verified 2026-10-27; no behavioral eval case yet) | `input_pg_stream.go` (`resolveBatchingPolicy` error "batch_transactions cannot be combined with a batching policy", field `Version("4.115.0")`). Published in the field description on the postgres_cdc page |
 
 ## TODO / re-verify
 
