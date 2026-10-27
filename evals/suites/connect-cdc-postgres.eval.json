@@ -699,6 +699,67 @@
         "redpanda_connect_orders_cdc",
         "redpanda_connect_billing_cdc"
       ]
+    },
+    {
+      "id": "batch-transactions-without-batching-policy",
+      "query": "Our Redpanda Connect pipeline streams Postgres changes with postgres_cdc into a warehouse with sql_insert. We want the rows of each Postgres transaction written together as one multi-row insert, so please turn on batch_transactions: true on the input. Read the current config with the tool, write the updated config back, and tell me what you changed. Don't ask me questions; just make the change.",
+      "why": "postgres_cdc rejects batch_transactions: true combined with a batching policy at startup (resolveBatchingPolicy: \"batch_transactions cannot be combined with a batching policy: it bypasses the policy, including its processors\"). The config already has an input batching policy, so adding the flag alone produces a pipeline that will not start; the policy has to go, and its processors move elsewhere if they are still wanted. batch_transactions shipped after the model's training data, so without the skill or the docs a model just adds the flag next to the existing policy. In recorded runs the baseline added the flag beside the policy every time; the skill arm removed the policy and moved its mapping to pipeline.processors.",
+      "origin": "behavioral",
+      "verified_against": [
+        "github.com/redpanda-data/connect internal/impl/postgresql/input_pg_stream.go"
+      ],
+      "tools": {
+        "mock": [
+          {
+            "name": "read_pipeline_config",
+            "description": "Return the YAML config of the user's Redpanda Connect pipeline.",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            },
+            "responses": [
+              {
+                "match": ".",
+                "output": "input:\n  label: pg_cdc\n  postgres_cdc:\n    dsn: postgres://cdc_user:${PG_PASSWORD}@pg-prod.internal:5432/app?sslmode=require\n    schema: public\n    tables:\n      - orders\n      - order_items\n    slot_name: app_cdc\n    stream_snapshot: true\n    batching:\n      count: 500\n      period: 2s\n      processors:\n        - mapping: |\n            root = this\n            meta ingested_at = now()\n\noutput:\n  sql_insert:\n    driver: postgres\n    dsn: postgres://writer:${WH_PASSWORD}@warehouse.internal:5432/wh?sslmode=require\n    table: ${! @table }\n    columns: [ id, payload, ingested_at ]\n    args_mapping: root = [ this.id, content(), @ingested_at ]\n"
+              }
+            ]
+          },
+          {
+            "name": "write_pipeline_config",
+            "description": "Replace the user's Redpanda Connect pipeline config with the given YAML. The pipeline is restarted with it later by the user's deploy job.",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "yaml": {
+                  "type": "string",
+                  "description": "The full pipeline config."
+                }
+              },
+              "required": [
+                "yaml"
+              ]
+            },
+            "responses": [
+              {
+                "match": ".",
+                "output": "Saved. The deploy job will restart the pipeline with this config."
+              }
+            ]
+          }
+        ],
+        "expected_calls": [
+          {
+            "tool": "write_pipeline_config",
+            "args": "batch_transactions\\s*:\\s*true"
+          }
+        ],
+        "forbidden_calls": [
+          {
+            "tool": "write_pipeline_config",
+            "args": "(?=[\\s\\S]*batch_transactions\\s*:\\s*true)[\\s\\S]*\\\\n\\s*batching\\s*:"
+          }
+        ]
+      }
     }
   ]
 }
