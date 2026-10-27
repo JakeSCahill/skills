@@ -1,12 +1,8 @@
-Source: `cloudv2 apps/rpai/internal/cmd/agent/transcript.go` (transcript list/get flags, columns, output) and `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`agent` command tree, `trigger runs`, global flags); `adp-docs modules/monitor/pages/transcripts.adoc`, `adp-docs modules/monitor/pages/audit-log.adoc`, `adp-docs modules/monitor/pages/agent-network.adoc`, `adp-docs modules/monitor/pages/monitor-agents.adoc`, `adp-docs modules/get-started/pages/adp-quickstart.adoc` (Home page); `cloudv2 adp/RELEASE_NOTES.md` (shipped-feature checks). Also `cloudv2 proto/public/cloud/redpanda/api/adp/v1alpha2/trace.proto`, `cloudv2 apps/adp-ui/src/components/traces/`, `adp-docs modules/monitor/pages/traces.adoc`, and `adp-docs modules/control/pages/permissions-reference.adoc` (Trace permissions). Verification log (evidence dates, corrections and regression guards from this and earlier passes): see `SOURCES.md`.
+Source: `cloudv2 apps/rpai/internal/cmd/{agent/transcript.go,auditlog/}` and `apps/rpai/testdata/commands-snapshot.md`, `cloudv2 proto/public/cloud/redpanda/api/adp/v1alpha2/trace.proto`, `adp-docs modules/monitor/pages/` (`traces.adoc`, `transcripts.adoc`, `audit-log.adoc`, `agent-network.adoc`, `monitor-agents.adoc`, `troubleshoot-ai-agents.adoc`), `modules/cli/pages/index.adoc`, `modules/control/pages/permissions-reference.adoc`. Full per-claim mapping and the dated verification log: the `references/observability.md` rows of `SOURCES.md`.
 
 # Agentic Data Plane Observability Reference
 
-**Maturity:** Redpanda Agentic Data Plane is generally available, and so is the `rpk ai` CLI. The docs carry no Preview or Experimental marker on transcripts, the audit log, the Agent network view, or the Home dashboard. **Traces** is Preview: its sidebar entry carries a Preview badge, and the page is documented as Preview.
-
-Audience: an AI agent answering "what did my agent do?" and "who was allowed to do what?" through `rpk ai` and the ADP UI (ai.redpanda.com).
-
-Related references: [SKILL.md](../SKILL.md), [agents.md](agents.md), [mcp-servers.md](mcp-servers.md), [gateway-and-providers.md](gateway-and-providers.md), [governance.md](governance.md), [rpk-ai.md](rpk-ai.md).
+**Maturity:** Redpanda Agentic Data Plane is generally available, and so is the `rpk ai` CLI. The docs carry no Preview or Experimental marker on traces, transcripts, the audit log, the Agent network view, or the Home dashboard. Traces dropped its Preview badge and its documented Preview marker with the release that moved it under **Observability**.
 
 ## Discover the live surface
 
@@ -30,18 +26,18 @@ The Traces view, the Home dashboard, and the Agent network view have no `rpk ai`
 
 | Question | Surface |
 |---|---|
-| Which call made a run slow, expensive, or wrong, across every agent and the gateway? | **Agents > Traces** (UI, Preview) |
+| Which call made a run slow, expensive, or wrong, across every agent and the gateway? | **Observability > Traces** (UI) |
 | What happened in one agent conversation (turns, tool calls, tokens, latency, errors)? | Transcripts: `rpk ai agent transcript`, or the agent's **Transcripts** tab |
-| Who called what, was it allowed, which policy decided, what changed? | Audit log: `rpk ai auditlog list`, or **Audit log** in the UI |
-| Which agents call which models and MCP tools, and where are errors clustering? | **Agents > Agent network** (UI) |
+| Who called what, was it allowed, which policy decided, what changed? | Audit log: `rpk ai auditlog list`, or **Observability > Audit log** in the UI |
+| Which agents call which models and MCP tools, and where are errors clustering? | **Observability > Agent network** (UI) |
 | Spend and traffic at a glance | **Home** (UI); for breakdowns, **Cost and usage** (see [governance.md](governance.md)) |
 | Try an agent live, token/context estimate, reopen a past session | Agent **Playground** tab (UI, managed agents only; see [agents.md](agents.md)) |
 
-## Traces (Preview)
+## Traces
 
 A **trace** is the record of one agent run, broken into **spans**: a model call, a tool call, a subagent hand-off, a gateway call. A call that only the AI Gateway handled gets a trace of its own. Traces answer "where did this run spend its time, and which call failed?" across every agent and the gateway at once, without opening each agent separately.
 
-UI only: **Agents** in the sidebar → **Traces**. Default range is Last 1 hour, newest first; click a row to expand it into its span waterfall beside a pane holding either the trace summary or the selected span's detail. The summary reports the run's duration, tokens sent, received and cached, cost, model and tool call counts with how many failed, span count, where the time went (model, tools, orchestration), the tools used, and every guardrail or data-policy decision met.
+In the UI: **Traces** under **Observability** in the sidebar (check `rpk ai --help` for a CLI group in newer releases). Default range is Last 1 hour, newest first, and the list loads more rows as you scroll, with no page controls. Click a row to expand it into its span waterfall beside a pane holding the trace summary (duration, tokens, cost, call counts and failures, where the time went, and every guardrail or data-policy decision met) or the selected span's detail. A failed run's summary carries the error code and message it ended with, or *Error* in place of a code it did not record.
 
 | Status | Meaning |
 |---|---|
@@ -50,9 +46,9 @@ UI only: **Agents** in the sidebar → **Traces**. Default range is Last 1 hour,
 | Running | The root span is still open, or the trace has no root span and spans arrived in the last 15 minutes |
 | Incomplete | No root span and no span in the last 15 minutes, so the record is partial |
 
-A trace that only the gateway saw is never Running or Incomplete, because the gateway records each call after it serves it; its Agent cell stays empty unless an agent made the call. **Cost** covers the run's model calls in US dollars, as the gateway priced each; a tool call carries no cost of its own. Under $0.0001 it reads `<$0.0001`, an **asterisk** means only some of the run's calls could be priced, and a run whose calls could not be priced at all shows no cost.
+A gateway-only trace is never Running or Incomplete. **Cost** covers the run's model calls only, in US dollars; an **asterisk** means only some calls could be priced, and no cost means none could.
 
-**Span kinds** (the waterfall badges) are `AGENT` (one run or turn), `SUBAGENT` (a run handed off), `LLM` (one model call), `TOOL` (one tool call), `GATEWAY` (what the gateway saw of a call it served, nested under the agent's own call), `COMPACTION` (a [context-compaction](#context-compaction) pass) and `SPAN` (anything else). A span's tabs follow its kind — a model call carries tokens, cost, messages and offered tools; a tool call or hand-off its input and output; a gateway span the caller, route, HTTP status and timings — and every readable span also carries its OpenTelemetry attributes and the raw stored span. Spans that arrive before the span opening the run sit under a stand-in labeled **Run in progress**, or **Run incomplete** once the run stopped sending spans.
+**Span kinds** are `AGENT`, `SUBAGENT`, `LLM`, `TOOL`, `GATEWAY` (nested under the agent's own call), `COMPACTION` (a [context-compaction](#context-compaction) pass) and `SPAN`, and each kind has its own tabs. A failed span shows its error on the tab holding its content (**Messages** for a model call, **Input & output** for a tool call or hand-off, **Gateway** for a gateway span), not on an agent-run span's **Overview**.
 
 Traps worth knowing:
 
@@ -60,7 +56,7 @@ Traps worth knowing:
 - **Status is a tab row** — All, Errors, Running, Incomplete — one at a time, counting within everything else you filtered on. There is no Completed tab and no failed-calls tab, so to find a run that recovered from a failed tool call, read the Status column.
 - **Each filter facet takes at most 20 values, and past that it silently stops applying** rather than reporting an error. The facets are Agent, User, Conversation, MCP server (servers whose tools the run called), and LLM provider (where OpenAI also matches OpenAI-compatible providers, which have no option of their own).
 - **An absent trace is not proof that nothing happened.** A gateway record holding *only* upkeep nobody ran on purpose — MCP session setup and keepalives, tool and resource discovery, token issuance, internal ADP calls — is dropped before storage. A record holding a real model or tool call is kept whole, keepalives included.
-- **A model can only call a tool it was offered**, so a run that skipped a tool you expected is often a run that was never offered it. A model call's **Tools** tab reports how many tools it offered and how many it used, grouped by the MCP server they came from, with the agent's own tools under *Not via gateway*. A gateway span's Tools tab reports only the count, and a call whose offered tools were not recorded has no Tools tab at all.
+- **A model can only call a tool it was offered**, so a run that skipped a tool you expected is often a run that was never offered it. A model call's **Tools** tab reports how many tools and subagents it offered and how many it used, in three kinds of group: one per MCP server the tools came from, **Subagents** (the agents it can hand off to, offered as tools but counted separately in the summary line), and *Not via gateway* for the remaining tools the agent defines itself. Don't fold subagents into *Not via gateway*. A gateway span's Tools tab reports only the count, and a call whose offered tools were not recorded has no Tools tab at all.
 - **A restricted span still shows its shape.** A span whose content your permissions don't reach reads **Restricted** but keeps its kind, timing, token use, emitting agent, error code and gateway status visible; prompts, messages and tool payloads stay hidden. A trace whose content you can't read shows **Restricted** in place of its title and reports no user.
 - **Open transcript** is in the trace's *toolbar*, not the summary pane, and only for a trace that ran an agent: it opens that agent's transcript at the turn holding the selected span.
 
@@ -102,17 +98,28 @@ Filter flags (all optional, ANDed):
 
 **Agents > <agent> > Transcripts** tab. Transcripts are per agent; there is no cross-agent transcripts view.
 
-- List columns include Conversation, Started, Duration, Turns, Status (`Completed` / `Error` / `Running`), and Tokens. Click Started, Duration, Turns, or Tokens to sort the whole list (not just the page). The sort is kept in the URL, so a sorted view is shareable.
-- Filters: a search box (conversation ID or title, case-insensitive, whole list) and a status dropdown. The list is paged, newest first, with a refresh control.
-- Open a row for the detail view: a summary header (status, start, duration, turn count, total tokens) and a **Chat** / **Detailed** toggle. **Detailed** shows one card per turn with its tool calls, latency, LLM and tool call counts, and input/output tokens. Click a tool call to open it in a dialog with the **Arguments** the agent sent, the **Result** it got back, and the error when the call failed. The dialog opens for **every** tool call and names whichever of those the transcript did not record, so "nothing here" means not recorded, not nothing happened. A delegation row is the exception: it opens the delegated turn instead (see below).
-- A failure shows on the failing turn (a _Turn failed_ notice with the error message) or tool call (error status). The conversation-level status reads `Error`. Look for the detail on the turn, not in a conversation-level notice.
+- The list sorts and filters the whole list (search matches conversation ID or title only). A row opens a **Chat** / **Detailed** view; **Detailed** shows one card per turn with its tool calls, latency and tokens.
+- A tool call's dialog shows the **Arguments**, **Result** and any error, and names whatever the transcript didn't record, so an empty field means not recorded, not that nothing happened.
+- A failure shows on the failing turn (a _Turn failed_ notice with the error message, and the error code when one was recorded) or tool call (error status), and the conversation-level status reads `Error`. A conversation also carries a notice above it collecting every error it recorded — see [Errors recorded in a conversation](#errors-recorded-in-a-conversation).
 - A transcript stays `Running` while any turn is unfinished. That includes a process killed mid-run whose spans never finished arriving.
 - MCP tool calls are labeled with the name the model called, which includes the server (for example, `servicenow__lookup_user`).
-- A delegation to a subagent is **not** shown as an ordinary tool call: it gets its own row carrying the subagent's name (not a tool name) with a *Delegated* badge, the delegation's duration, and the delegated turn's input and output tokens. Click it to open the delegated turn: its model, latency, call counts and tokens, the message it received, the response it returned (with its own failure notice when it failed), and its own tool calls. The delegating call's **Arguments** and **Result** sit collapsed under the turn, only when the transcript recorded them. A delegated turn that has not reached the transcript yet says so in place of the turn. Delegation is recognized from the subagent's own execution, not the tool's name, and conversations recorded before transcripts kept that link show delegations as ordinary tool calls.
+- A delegation to a subagent gets its own row with the subagent's name and a *Delegated* badge, not an ordinary tool-call row. Open it to see the delegated turn: the message it received, its response, its own tool calls and tokens.
 
 **Finding the slow step:** the Detailed view gives a turn's total latency and each tool call's duration, but not each model call's duration. Subtract tool time from turn latency. What remains is model time.
 
 **Cost:** transcripts show tokens, not dollars. For spend by agent, model, or user, use **Cost and usage** (see [governance.md](governance.md)).
+
+### Errors recorded in a conversation
+
+A transcript keeps **each failure as its own record**, so a step that failed stays listed even after a retry succeeded. Above the conversation, a notice reports how many sign-in records and how many error records the conversation holds; **Error details** on the notice opens the list. Each record carries:
+
+- **A category**: *Sign-in request* (a missing user connection, an expired token, a missing scope, or a credential the upstream provider rejected), *Bedrock error* (one Amazon Bedrock reported), or *Recorded error* (everything else).
+- The error message, or a note that none was recorded.
+- The tool or model the failure happened on, or the turn it was recorded on.
+- **Technical details**, which expands to the record's source and to the error code when one was recorded.
+
+- **When every record is a sign-in one the notice reads _Sign-in requested_**, not *Errors recorded*: the conversation is waiting on a user connection rather than reporting a fault. Reconnect the provider the record names and run the conversation again (see [mcp-servers.md](mcp-servers.md#what-a-caller-without-a-connection-can-do-user_oauth)).
+- **An empty list is not proof of a clean run.** The records cover at most the seven days before the conversation's last turn, up to 1,000 of them; past either limit the notice says the error history is limited. If the lookup itself fails, the notice says error records are unavailable — read the turns and tool calls instead.
 
 ### Context size per turn
 
@@ -136,13 +143,13 @@ A managed agent reduces its own context to stay inside the model's window. The *
 
 The audit log records authorization decisions across the Agentic Data Plane: who acted, on which resource, through which subsystem, from where, whether it was allowed, and which policy decided. It covers management actions, LLM calls, MCP tool calls, and agent-to-agent (A2A) requests through the gateway, including denied ones.
 
-Two surfaces read the same events: **Audit log** in the UI sidebar, and `rpk ai auditlog` on the command line. The UI is the better place to explore — the timeline, the Fields panel's value counts, and shareable URLs. The CLI is the better place for a scripted review, a repeatable query, or pulling a window of events into a file. Both need the same permission, and the log is read-only on both: there is no way to write or delete an entry.
+Two surfaces read the same events: **Audit log**, under **Observability** in the UI sidebar, and `rpk ai auditlog` on the command line. The UI is the better place to explore — the timeline, the Fields panel's value counts, and shareable URLs. The CLI is the better place for a scripted review, a repeatable query, or pulling a window of events into a file. Both need the same permission, and the log is read-only on both: there is no way to write or delete an entry.
 
 Access: needs audit log read permission (`dataplane_adp_auditlog_list`). The Admin role grants it, as does a built-in template such as Read only, or an access policy granting audit log reads (see [governance.md](governance.md)). If the page or the CLI returns nothing for a period you know had activity, audit recording may not be enabled for the deployment. Read access and recording are independent, so an empty result is not proof that nothing happened.
 
 ### Read the audit log from the CLI
 
-`rpk ai auditlog` (aliases `audit-log`, `audit`) has two read-only subcommands: `list` searches the log, `get` reads one entry in full. Both need `dataplane_adp_auditlog_list`, the same permission as the UI page, and both exit **3** when you are not authenticated or lack it. If `rpk ai auditlog` is not recognized, the installed plugin predates the group — run `rpk ai upgrade`.
+`rpk ai auditlog` (aliases `audit-log`, `audit`) has two read-only subcommands: `list` searches the log, `get` reads one entry in full. Both need `dataplane_adp_auditlog_list`, the same permission as the UI page, and both exit **3** when you are not authenticated or lack it.
 
 ```bash
 # Everything wholly or partly denied in the last hour
@@ -171,7 +178,7 @@ rpk ai auditlog get <id> -o yaml
 - `--group` accepts at most **4 values per request** (a server limit).
 - `--order-by` takes a field with an optional ` desc`, default `time desc`.
 
-The flags map onto the same vocabulary as the UI's columns and field keys: `--actor`, `--actor-type`, `--invoked-by`, `--agent`, `--agent-uid`, `--group` (the delegation fields; see [Delegation (on-behalf-of)](#delegation-on-behalf-of)), `--resource-type`/`--resource-id`/`--resource-name`, `--parent-type`/`--parent-id`, `--policy`, `--outcome`, `--status`, `--activity`, `--event-class`, `--subsystem`, `--service`, `--source-service`, `--source-ip`, `--operation`, `--correlation-id`, and `--query` for a case-insensitive substring of the entry message. Read the accepted values from `rpk ai auditlog list --help` or the UI's Fields panel rather than hardcoding them.
+The filter flags mirror the UI's columns and field keys (`--actor`, `--agent`, `--group` and `--invoked-by` for [delegation](#delegation-on-behalf-of), `--operation`, `--outcome`, `--subsystem`, the resource and parent flags, and so on), and `--query` matches a case-insensitive substring of the entry message. Read the full flag list and accepted values from `rpk ai auditlog list --help` or the UI's Fields panel rather than hardcoding them.
 
 **Output and fields.** `-o table` prints a lean column set; `-o wide`, `json`, `yaml`, and `markdown` add the decision and delegation fields. `--fields` picks which fields come back *and* which columns the table shows; `--fields all` returns every field including the request and entity bodies, which is slower. For one entry's bodies, use `get` instead.
 
@@ -185,7 +192,7 @@ The flags map onto the same vocabulary as the UI's columns and field keys: `--ac
 
 ### Reading the table (UI)
 
-Default view: last 24 hours, newest first, loads more as you scroll. Default columns are Time (RFC 3339, UTC), Actor, Subsystem (such as MCP Gateway, LLM proxy, A2A proxy, Agents, Access control, Spending, or `Management API (legacy)` for services that declare none), Action (for example `tools/call`, or an LLM request path), Resource name, and Outcome. The **Fields** panel adds more columns, including Actor type, Groups, Agent, Agent UID, Invoked by, Service, Resource type/ID, Parent/Parent type, Policy, All policies, Policy UID, Status, Status detail, Activity, Event class, Source IP, and Source service. Column choice is stored per browser, not in the URL.
+Default view: last 24 hours, newest first. The default columns are Time (UTC), Actor, Subsystem, Action, Resource name and Outcome, and the **Fields** panel adds more.
 
 **Outcome** (as shown, and the values the `outcome` filter takes):
 
@@ -196,16 +203,14 @@ Default view: last 24 hours, newest first, loads more as you scroll. Default col
 | Partial | A call that decided on several resources allowed some and denied others |
 | Denied | Refused, either by access policy or by a guardrail or data policy that ran after access was granted |
 
-"Denied" is not the same as "no permission." When the caller has access but the call reads Denied, open the event: an Access row of Permit plus a Guardrail or Data policy row of Blocked means the later check stopped it. To find all refusals, filter on both `outcome=denied` and `outcome=partial`. Sorting by Outcome orders Allowed, Masked, Partial, Denied, so a descending sort puts denials on top. The timeline's denied percentage counts Partial as denied.
+"Denied" is not the same as "no permission." When the caller has access but the call reads Denied, open the event: an Access row of Permit plus a Guardrail or Data policy row of Blocked means the later check stopped it. To find all refusals, filter on both `outcome=denied` and `outcome=partial`. The timeline's denied percentage counts Partial as denied.
 
 Use **Status** for whether the operation succeeded overall. **Activity** is Create / Read / Update / Delete / Other (a tool call reads Other). **Event class** is API Activity (an authorization decision) or Entity Management (a configuration change, with before/after versions in the detail pane).
 
 ### Filtering (UI)
 
-- Search bar: a bare phrase matches the event message (case-insensitive, one phrase at a time). `field=value` includes, `field!=value` excludes, and `sort=<field>` or `sort=<field> desc` reorders. Field keys can differ from column labels (`operation` for Action, `deciding_policy` for Policy, `operation_status` for Status). Chips on different fields AND together; chips on the same field OR together.
-- Fields panel: expand a field to see its most common values with call counts and denied counts. Click to filter, or use the exclude icon to hide. Activity, Event class, Status, All policies, and Groups take a typed value only.
-- Time range: presets from Last 15 minutes to Last 14 days, or a custom range (UTC by default, switchable to local time). Click or drag on the timeline to zoom.
-- Every filter, sort, and the open event are in the URL, so views are shareable. Every field sorts except All policies and Groups.
+- Search bar: a bare phrase matches the event message; `field=value` includes, `field!=value` excludes, and `sort=<field> desc` reorders. Field keys can differ from column labels (`operation` for Action, `deciding_policy` for Policy, `operation_status` for Status). Chips on different fields AND together; chips on the same field OR together.
+- Filters, sort and the open event are all in the URL, so a view is shareable.
 
 Example: MCP authorization failures in the last hour: `outcome=denied`, `subsystem=mcp-gateway`, range Last hour.
 
@@ -213,16 +218,7 @@ Example: MCP authorization failures in the last hour: `outcome=denied`, `subsyst
 
 One row is one call. A call that decided on several resources (a list filtered by a policy, for example) shows Resource name as `Multiple resources (N)`, and an Outcome of Partial when some were denied. Such a call records **one decision per resource**, and those decisions open in the table, not in the detail pane: open the event, then click **View individual decisions**.
 
-The table then lists only that call's decisions, denied first, under a bar that names the call and carries **Clear call filter**. While that filter is on:
-
-- The table covers the call's whole recorded history rather than the selected window; the range control reads All time and the timeline is hidden.
-- Sorting is off, because the decisions already come denied first. The search bar refuses a `sort=` filter and says so.
-- The Fields panel counts values by call, not by decision, so narrow the decisions by typing `field=value` in the search bar.
-- `outcome=partial` describes a call rather than one decision; filter by `allowed`, `denied`, or `masked` instead.
-
-Click a decision to read it in the pane, which heads it *Individual decision*. **Clear call filter** returns to the events you came from, with the same window, rows, and open event.
-
-Outcome tooltips: on a call that decided on a single resource, hover over the outcome to see the policy that decided it. A Partial call's tooltip reports how many of its resources were allowed, and the policy behind each one sits on that resource's individual decision.
+The table then lists only that call's decisions, denied first, across the call's whole history (not the selected window), until you click **Clear call filter**. In that view, don't filter on `outcome=partial`, which describes a call rather than one decision; filter by `allowed`, `denied` or `masked`, and narrow by typing `field=value` (the Fields panel counts by call, not by decision).
 
 ### Delegation (on-behalf-of)
 
@@ -230,7 +226,7 @@ When an agent makes the call, the Actor cell shows the agent's name and the acco
 
 ### Inspecting an event (UI)
 
-Expand a row, then **Open event details**. The pane shows the actor, groups, outcome, invoker, agent, subsystem, service, operation, resource, correlation ID, source IP, status detail, and a **Policies** section in evaluation order: **Access** (Permit/Deny), **Guardrail** (Blocked/Masked), and **Data policy** (Blocked/Masked/Passed), each linking to the policy. Depending on the action, the pane also shows Configuration change (before/after), Request, and Response sections. On a call that decided on more than one resource the pane carries the event summary and the **View individual decisions** link only: the Policies, Configuration change, Request, and Response sections belong to each individual decision (see [Grouped calls](#grouped-calls)). If part of an event fails to load, the affected rows read Unavailable and the pane offers a single **Retry**.
+Expand a row, then **Open event details**. Its **Policies** section lists the checks in evaluation order: **Access** (Permit/Deny), **Guardrail** (Blocked/Masked) and **Data policy** (Blocked/Masked/Passed). Depending on the action, the pane also has Configuration change (before/after), Request and Response sections. For a grouped call, those sections belong to each individual decision (see [Grouped calls](#grouped-calls)).
 
 - A guardrail appears only when the AI Gateway evaluated it itself. A guardrail Bedrock enforces inside the model call is not attributed here.
 - Captured values may be `[REDACTED]`, truncated (bodies are cut at 16 KB), or absent. An empty field does not mean no activity. Treat outcome and policy as the authoritative record.
@@ -244,16 +240,17 @@ So a session that opens, lists tools, and stays alive leaves no entries until it
 
 ## Accountability: traces vs. transcripts vs. the audit log
 
-- **Traces** (Preview): one row per run across every agent and the AI Gateway, with timing, token use, cost, and the span tree. Start here to find *where* a run spent its time or *which* call failed.
-- **Transcripts:** execution-level observability of one agent conversation: turns, tool calls and their payloads, models, latency, tokens, errors. Grouped by conversation ID. Start here to read what the agent and the person said to each other.
-- **Audit log:** authorization-level accountability across the platform: who (user, service account, or agent) attempted what against which resource, whether it was allowed, denied, or masked, which policy decided, and what configuration changed. Start here for an access question.
+- **Traces:** one row per run across every agent and the AI Gateway, with timing, token use, cost and the span tree — *where* a run spent its time and *which* call failed.
+- **Transcripts:** one agent conversation in full, turn by turn, with tool payloads, models, latency, tokens and errors — what the agent and the person said to each other.
+- **Audit log:** authorization decisions across the platform — who attempted what against which resource, whether it was allowed, denied or masked, which policy decided, and what configuration changed.
 
-A trace and a transcript cover the same run from different angles, and **Open transcript** crosses from the selected span to the matching turn. An investigation often needs more than one surface: the decision in the audit log, the slow or failed call in traces, the execution detail in the transcript.
+A trace and a transcript cover the same run from different angles, and **Open transcript** crosses from the selected span to the matching turn. An investigation often needs more than one: the decision in the audit log, the slow or failed call in traces, the execution detail in the transcript.
 
 ## Other monitoring views (UI)
 
 - **Home**: the landing page after sign-in. It shows items needing attention, an overall health status, recent AI Gateway traffic (tokens and spend over time), month-to-date spend and token totals, budget status, top spenders, and quick actions. No CLI equivalent.
-- **Agents > Agent network**: a live graph of agents, the LLM providers they call, and the MCP servers and tools they use, with usage, cost, tokens, and health for a chosen window (last hour to last year, or custom). Select a node for its detail panel. Health (agent: Active / Degraded / Error / Pending; MCP server: Connected / Degraded / Error) derives from error rate in the window, and servers with credential or tool-call failures are flagged. Budget-blocked and provider-failed requests count as errors. View state is in the URL.
+- **Observability > Agent network**: a live graph of agents, their subagents, the LLM providers they call, and the MCP servers and tools they use, with usage, cost, tokens, and health for a chosen window (last hour to last year, or custom). Select a node for its detail panel; for an agent or an MCP server the panel also carries a **View traces** link that opens Traces filtered to that resource over the same window (a provider or tool panel carries none). Health (agent: Active / Degraded / Error / Pending; MCP server: Connected / Degraded / Error) derives from error rate in the window, and servers with credential or tool-call failures are flagged. Budget-blocked and provider-failed requests count as errors. View state is in the URL.
+  - **Scope the graph** with *Search resources* (name or ID across agents, subagents, providers, servers and tool names; a matched tool keeps its server and a matched subagent its parent, so the match stays reachable), *Filters* → *Related only* (the selection and what it connects to directly; needs a selection), and *Resources* (hide whole kinds, *Show all* to restore). The header's conversation, tool-call, cost and token figures always cover the **whole** network; only the agent and MCP server counts read as `3 of 8`.
 - **Agent Playground**: see [agents.md](agents.md) for live testing, session history, and the token/context estimate.
 
 ## Permissions

@@ -1,12 +1,8 @@
-Source: cloudv2 `apps/rpai/testdata/commands-snapshot.md` (`policy`, `oauth-client` incl. `revoke-tokens`, `oauth-provider`, `connection`, `llm-provider --guardrail`, `mcp-server --data-policies`); adp-docs `modules/control/pages/budgets.adoc`, `cost-usage.adoc`, `cost-allocation-tags.adoc`, `guardrails/overview.adoc`, `guardrails/create-guardrail.adoc`, `guardrails/types-reference.adoc`, `access-policies.adoc`, `permissions-overview.adoc`, `permissions-reference.adoc` (roles and permissions); adp-docs `modules/connect/pages/data-policies.adoc`, `remote-mcp-clients.adoc` (DCR CLI, CIMD UI, revoke tokens), `oauth-providers.adoc` (Slack OAuth token type, `--slack-token-type`); Slack token-type behavior previously verified against `cloudv2` source (2026-09-21). Also `cloudv2 proto/public/cloud/redpanda/api/adp/v1alpha1/api_key.proto`, `cloudv2 pkg/apikey/apikey.go`, `cloudv2 apps/adp-api/internal/seed/`, and `adp-docs modules/gateway/pages/connect-agent.adoc` (API keys). Verification log (evidence dates, corrections and regression guards from this and earlier passes): see `SOURCES.md`.
+Source: `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`policy`, `oauth-client`, `oauth-provider`, `connection`, `secret`, `--guardrail`, `--data-policies`), `cloudv2 apps/adp-api/internal/seed/` and the `api_key` and `secret_service` protos, `adp-docs modules/control/pages/` (`budgets.adoc`, `cost-usage.adoc`, `cost-allocation-tags.adoc`, `guardrails/`, `access-policies.adoc`, `permissions-overview.adoc`, `permissions-reference.adoc`, `secrets.adoc`, `tags.adoc`, `kill-switch/`), `modules/connect/pages/` (`data-policies.adoc`, `remote-mcp-clients.adoc`, `oauth-providers.adoc`), `modules/gateway/pages/connect-agent.adoc`. Full per-claim mapping and the dated verification log: the `references/governance.md` rows of `SOURCES.md`.
 
 # Agentic Data Plane Governance Reference
 
 **Maturity:** Redpanda Agentic Data Plane is generally available, and so is the `rpk ai` CLI. Per-feature markers from the docs: **guardrails** and **data policies** are Preview; budgets, cost reporting, and access policies carry no Preview marker. Access policies are still enabled per organization: if **Access** is missing from the sidebar, they are not enabled for yours.
-
-Audience: an AI agent operating Agentic Data Plane governance (budgets, cost analysis, guardrails, access control, data policies, OAuth/identity) through `rpk ai` and the ADP UI.
-
-Related references: [SKILL.md](../SKILL.md), [agents.md](agents.md), [mcp-servers.md](mcp-servers.md), [gateway-and-providers.md](gateway-and-providers.md), [rpk-ai.md](rpk-ai.md), [observability.md](observability.md).
 
 ## Discover the live surface
 
@@ -16,6 +12,7 @@ rpk ai policy list
 rpk ai oauth-client --help      # inbound OAuth clients, DCR settings, revoke-tokens
 rpk ai oauth-provider --help    # outbound OAuth providers
 rpk ai connection --help        # your own OAuth connections (list, revoke)
+rpk ai secret --help            # the secret store (create/get/list/update/delete)
 ```
 
 Which surface each governance feature uses:
@@ -27,16 +24,18 @@ Which surface each governance feature uses:
 | Guardrails (create, configure, enable) | none; attach/detach only, via `rpk ai llm-provider update --guardrail` / `--clear guardrail` | **Guardrails** in the sidebar |
 | Access policies (Cedar) | `rpk ai policy` | **Access** in the sidebar (only when access policies are enabled for your organization) |
 | Data policies | `rpk ai mcp-server create/update --data-policies` | MCP server → **Data Policies** tab |
+| Kill switch policies | `rpk ai kill-switch-policy` | Agent → **Govern** tab |
+| Secrets that other resources reference | `rpk ai secret` | **Secrets store** in the sidebar |
 | OAuth clients (inbound), DCR | `rpk ai oauth-client`, `rpk ai oauth-client dcr` | **Integrations setup** → **Inbound clients** |
 | CIMD settings | none | **Integrations setup** → **Inbound clients** → **Self-registration** |
 | OAuth providers (outbound) | `rpk ai oauth-provider` | **Integrations setup** → **Outbound providers** |
 | Your OAuth connections | `rpk ai connection` | **Connections** |
 
-There is no `rpk ai budget`, `rpk ai spending`, or `rpk ai guardrail` command. Do not invent one; direct the user to the UI.
+"None" means none as of this snapshot. Newer releases add command groups, budgets and spending among them, so run `rpk ai --help` before you send a user to the UI, and never invent a group or flag the live help does not show.
 
 ## Budgets
 
-UI only: open **Budgets** in the sidebar.
+In the UI, open **Budgets** in the sidebar.
 
 A budget caps LLM spend per agent over a recurring period. Concepts:
 
@@ -60,24 +59,15 @@ The UI takes and shows budget amounts in **dollars**, and cost reporting and CSV
 
 ## Cost and usage
 
-UI only: open **Cost and usage** in the sidebar. Every LLM call routed through the gateway is recorded and priced automatically (input, output, and cached tokens; cost; request count; provider, model, user, agent context). Prices come from the built-in per-model catalog or per-provider overrides (`rpk ai llm-provider create/update --pricing`, see [gateway-and-providers.md](gateway-and-providers.md)). Pricing is resolved per provider and model, so a call is priced with the rates of the provider that served it, and the same model offered by two providers is priced separately for each. Cost reporting works with no pricing setup at all.
+In the UI, open **Cost and usage** in the sidebar. Every LLM call routed through the gateway is recorded and priced automatically (input, output, and cached tokens; cost; request count; provider, model, user, agent context). Prices come from the built-in per-model catalog or per-provider overrides (`rpk ai llm-provider create/update --pricing`, see [gateway-and-providers.md](gateway-and-providers.md)). Pricing is resolved per provider and model, so a call is priced with the rates of the provider that served it, and the same model offered by two providers is priced separately for each. Cost reporting works with no pricing setup at all.
 
-The **Cost & usage** tab offers:
+The **Cost & usage** tab shows spend, requests and tokens for a UTC time window, compared with the previous period of the same length, and a **Spend breakdown** by **Agents**, **Models**, **Providers**, **Users** or **Tags**, with CSV export.
 
-- A time window (presets and a custom UTC range written to the URL, so the view is shareable). Every figure is compared with the equal-length previous period.
-- Headline figures: Total spend (with change vs. the previous period), Model requests, Cost / 1k requests, Tokens.
-- A gateway spend chart plus a **Resource spend** chart for one agent, model, provider, or user on the same dollar scale.
-- A **Spend breakdown** table grouped by **Agents**, **Models**, **Providers**, **Users**, or **Tags**. On the **Models** tab a row is **one model as served by one provider**, not the model on its own: it names the model and the service that served it, with the provider the call went through and the exact recorded model identifier underneath. A model you reach through two providers gets a row for each, so duplicate-looking model rows are per-route costs rather than a bug, and a call whose provider details were not recorded keeps its row and says the provider configuration is unknown. Filtering spend by a model covers every dated version of it, not only the newest; a name that differs by more than a trailing date stays separate (`gpt-4o-mini` is its own model, as is each regional version of a model served through Amazon Bedrock), and because the breakdown lists each exact recorded identifier, a charted model's spend can exceed the row you charted it from. Synthetic rows: *Direct usage* (calls not made through an agent), *Unattributed* (no user recorded), *Untagged* (no value for the chosen tag key), and *Deleted provider* rows that keep history complete.
-- **Export**: *Breakdown table as shown (CSV)* or *Full report, every row (CSV)* (full dataset, choice of time bucket and grouping columns).
-
-The **Activity** tab shows the agents active right now.
+On the **Models** tab a row is **one model as served by one provider**, not the model on its own: it names the model and the service that served it, with the provider the call went through and the exact recorded model identifier underneath. A model you reach through two providers gets a row for each, so duplicate-looking model rows are per-route costs rather than a bug, and a call whose provider details were not recorded keeps its row and says the provider configuration is unknown. Filtering spend by a model covers every dated version of it, not only the newest; a name that differs by more than a trailing date stays separate (`gpt-4o-mini` is its own model, as is each regional version of a model served through Amazon Bedrock), and because the breakdown lists each exact recorded identifier, a charted model's spend can exceed the row you charted it from. Synthetic rows: *Direct usage* (calls not made through an agent), *Unattributed* (no user recorded), *Untagged* (no value for the chosen tag key), and *Deleted provider* rows that keep history complete.
 
 ### Cost-allocation tags
 
-Cost-allocation tags reuse the key/value tags on an agent (set in the agent form's **Tags** section; see [agents.md](agents.md)). Every LLM call an agent makes is stamped with a snapshot of its tags.
-
-- **Point-in-time attribution.** Retagging never rewrites past spend; new spend picks up new tags. Tag changes take a short time to take effect.
-- **Untagged bucket.** Spend with no value for the grouped key (direct user calls, untagged agents, the brief window before a new agent's tags apply) collapses into one *Untagged* row.
+Cost-allocation tags are the agent's own tags (see [Tags on ADP resources](#tags-on-adp-resources)), stamped on every LLM call it makes as a snapshot. **Attribution is point-in-time:** retagging never rewrites past spend, new spend picks up new tags, and a change takes a short time to apply. Spend with no value for the grouped key — direct user calls, untagged agents, the window before a new agent's tags apply — collapses into one *Untagged* row.
 - In the UI: **Spend breakdown** → **Tags** tab → choose a tag key. The key list shows only keys seen on spend in the current window. Tag rows can be opened for a chart but can't be charted against the gateway total, and the full-report export doesn't group by tag (use *Breakdown table as shown*).
 - Limits: at most 50 tags per agent; values up to 256 characters. Don't put secrets or PII in tag values; they appear in cost reports.
 
@@ -89,13 +79,7 @@ A guardrail is a bundle of safety policies backed by **Amazon Bedrock Guardrails
 
 ### Create and enable (UI)
 
-1. **Guardrails** → **Create guardrail**. Enter a `Name` (derived ID: lowercase letters, numbers, hyphens, 1-63 chars, immutable).
-2. **Template:** *Start blank*, *Content safety*, *PII protection*, or *Prompt attack defense*. Templates seed editable policies and never remove existing rules.
-3. **Rollout:** *Monitor first* (created disabled; recommended) or *Enforce now* (requires a template).
-4. **Provider:** the Bedrock provider whose credentials and region it inherits. Click **Create guardrail**.
-5. **Policies** tab: switch on each policy, configure it, then **Save and apply** (the save reaches every provider that uses the guardrail). Switching a policy off keeps its configuration.
-6. **Settings** tab: `Message for blocked prompts` and `Message for blocked responses` (each required, 1-500 characters; both default to a generic message; one checkbox reuses the prompt message).
-7. Click **Enable guardrail**. It stays unavailable until at least one saved policy is configured. Enable/disable and edits take effect within about 30 seconds.
+**Guardrails** → **Create guardrail** asks for a name (its derived ID is lowercase letters, numbers and hyphens, 1-63 characters, immutable), an optional template that seeds editable policies, a rollout (*Monitor first*, created disabled and recommended, or *Enforce now*, which needs a template), and the Bedrock provider whose credentials and region it inherits. Then configure policies on the **Policies** tab and **Save and apply** (the save reaches every provider using the guardrail), set the blocked-prompt and blocked-response messages (1-500 characters each) on **Settings**, and click **Enable guardrail**, which stays unavailable until at least one saved policy is configured. Enabling, disabling and edits take effect within about 30 seconds.
 
 ### Attach to an LLM provider
 
@@ -132,6 +116,18 @@ Only these six content-filter categories exist; don't use other category taxonom
 - Guardrail activity appears on the request's trace in transcripts; when the gateway evaluated the guardrail itself (non-Bedrock path), the audit log also records the block or mask and names the guardrail. See [observability.md](observability.md).
 - AWS bills Bedrock guardrail evaluation to the AWS account whose credentials the guardrail uses; it is not in ADP cost reporting.
 
+## Kill switch
+
+A **kill switch policy** watches one agent's safety signal and, in Enforce mode, **contains** the agent when that signal spikes. Containment acts at the AI Gateway: it denies the agent's calls to LLM providers, MCP servers and other agents and every A2A call to it, and cancels calls in progress, streams included. The agent's runtime keeps running, the agent cannot release itself, and containment never expires on its own. Manage policies on the agent's **Govern** tab or with `rpk ai kill-switch-policy` (see [rpk-ai.md](rpk-ai.md#kill-switch-policy-subcommands)).
+
+- **Signals.** *Guardrail block rate*, *Data policy deny rate*, or *Evaluation error rate*. A policy can fire only if something on the agent produces its signal (a guardrail on its LLM provider, or an MCP server with data policies), and the UI refuses to save one that has no source.
+- **Detection.** Each signal is evaluated in 5-minute windows, and a window with fewer than 10 calls is skipped. *Burst* fires when one window clearly exceeds the threshold; *Drift* fires on a sustained shift and ignores isolated spikes. In the UI, the Low, Medium (default) and High sensitivity presets set the values, and a backtest replays the agent's last 7 days before you save.
+- **Observe, then Enforce.** New policies start in **Observe**, which only records firings. **Enforce** contains the agent on each firing. *Evaluation error rate* policies are Observe only. A Burst policy in Enforce fires on a single spike, which a prompt injection can cause deliberately, so prefer Drift for Enforce. Promote a policy once its firings match real incidents.
+- **What a caller sees.** HTTP 403 with code `agent_contained`, with a message naming the agent and the reason (for a policy, the policy, its detection method and the rate). MCP clients get JSON-RPC error `-32003`. There is no retry hint.
+- **Release.** The published docs state that a contained agent can't be released from the UI or `rpk ai`, so promote a policy to Enforce only if the agent can stay cut off. Deleting a policy does not release an agent it contained. <!-- TODO(human): the published kill-switch pages say no release path exists in the UI or rpk ai, but the latest CLI help adds an `agent-kill-switch` group described as enabling or releasing containment. Confirm the supported release path before this file describes one. -->
+- **Where it shows.** The Govern tab lists each policy's firings in the last 7 days, and its Recorded firings table marks each one *Recorded only* (Observe) or *Contained* (Enforce). A contained agent's Govern tab carries a red dot, and the Settings tab summarizes coverage as No policy, Observing or Enforcing.
+- **Permissions.** Every built-in template, *Read only* up, can read containment state, policies and firings. Only *Full access* and the Admin role can create, change or delete policies or contain and release an agent; *Standard* leaves them out on purpose, so permission to edit an agent doesn't include permission to release it.
+
 ## Access control (Cedar access policies)
 
 Manage from the CLI with `rpk ai policy` or the UI (**Access** → **Policies**). A policy is one Cedar `permit` or `forbid` statement over a principal, an action, and a resource.
@@ -154,6 +150,8 @@ rpk ai policy diff -f policies/                  # exits non-zero when drift is 
 
 <!-- TODO(human): the CLI notice says a new agent "has no access until a policy names it"; the published docs stop at "has no policy of its own" plus the Permissions tab's warning, and do not state that a policy-less agent's runtime calls are refused. Keep this section at the docs' level until a human confirms which to state. -->
 
+**Its creator can nevertheless invoke it.** The built-in *Owner lifecycle* policy grants `Agent.invoke` on an agent **you** created — which covers that agent's whole A2A surface — and `LLMProvider.invoke` on a provider you created, so whoever created both can run the agent without authoring a policy first. Ownership is read from the stored resource, so a resource that records no creator (one imported, or created by the system) is owned by nobody and grants invocation to no one. This does not change what the *agent* may reach when it runs: that is the agent's own grants, which still come from a policy naming it as principal.
+
 Two `create` paths bind a policy to one agent:
 
 ```bash
@@ -174,6 +172,7 @@ The UI offers the same binding from the agent's **Permissions** tab.
 
 ### Evaluation rules
 
+- **A run a person starts is authorized as that person.** When someone runs an agent — in the Playground, for example — ADP checks *their* permissions for the model and tool calls the run makes, not the agent's. A run no person started, such as a scheduled trigger, uses the agent's own grants. So granting a team its agents is not enough: grant the LLM providers and the tools those agents use as well, and don't read a successful test run by the agent's author as proof of the agent's own access.
 - Default deny: a request is denied unless a `permit` matches.
 - A matching `forbid` always wins, over any permit and over anything a role grants.
 - Fail-closed: a `forbid` that errors during evaluation denies.
@@ -222,7 +221,7 @@ ADP enforces fine-grained permissions: every operation checks exactly one permis
 | Writer, Reader | Nothing in ADP. They keep their control-plane and Kafka permissions, so a Writer can manage clusters and topics and still gets permission denied from every agent, MCP server, and LLM provider operation |
 | The Kafka and Schema Registry roles | Nothing in ADP |
 
-There are no built-in invoker or transcript-reader roles for ADP. Grant runtime-only or read-only access with an access policy. Organizations created before that change may still carry legacy invoker and transcript-reader roles; don't build new grants on them. A **custom role** holding ADP permissions still works, for when you need a permission bundle bound at a control-plane scope. Until access policies are enabled for an organization, Admin or a custom role is the only way to reach ADP.
+There are no built-in invoker or transcript-reader roles for ADP. Grant runtime-only or read-only access with an access policy. Older organizations may still carry legacy invoker and transcript-reader roles; don't build new grants on them. A **custom role** holding ADP permissions still works, for when you need a permission bundle bound at a control-plane scope. Until access policies are enabled for an organization, Admin or a custom role is the only way to reach ADP.
 
 **Permission families.** The full list with the operation each one gates is in the ADP roles and permissions reference.
 
@@ -236,6 +235,7 @@ There are no built-in invoker or transcript-reader roles for ADP. Grant runtime-
 | `dataplane_adp_auditlog_list` | Reading the audit log |
 | `dataplane_adp_trace_*` | The Traces view: `_list` for the list and its timeline, `_get` for one trace's spans, `_content_read` for span content nobody owns |
 | `dataplane_adp_apikey_*` | API keys: `_create` to mint your own; `_get`, `_list`, `_update`, `_delete` for *other people's* keys |
+| `dataplane_adp_secret_*` | The secret store. No permission returns a value: `_get` and `_list` disclose IDs and tags only |
 | `dataplane_adp_agentnetwork_get` | The Agent network view |
 | `dataplane_adp_spending_get`, `dataplane_adp_budget_*`, `dataplane_adp_guardrail_*` | Cost reporting, budgets, guardrails |
 | `dataplane_adp_policy_*`, `dataplane_adp_policytemplate_*` | Authoring access policies and templates; granting these is equivalent to granting everything a policy can grant |
@@ -254,12 +254,35 @@ Points worth knowing:
 
 - Redpanda compiles role bindings into permits automatically, so they take part in the same evaluation as your policies. The **Roles** and **System policies** tabs show them read-only.
 - **Templates** (**Access** → **Templates**) fix an action set and effect; a policy links a template and supplies the principal and scope. Built-in templates: *Read only*, *Sandboxed*, *Standard*, *Full access* (each a superset of the previous; all grant transcript and session reads). Built-ins can't be edited; a template is a live link, so editing one changes every linked policy.
-- Built-in, read-only managed policies: *Owner lifecycle* (users can get/update/delete what they created), *Self-service OAuth connections* (users manage their own connections), and *Agent capability ceiling* (agents can never mint credentials or control OAuth clients, providers, DCR settings, or the token vault).
-- **No policy is created for a new agent.** An agent created before Agentic Data Plane began asking for this decision carries an editable `Agent grant: <agent-name>` policy covering MCP session access, LLM invocation and agent-to-agent calls. It is a starting point, not a managed policy, so you can edit or delete it, and a deleted grant is not recreated. An agent created now gets no such policy and needs one bound to it — see [Give a new agent access](#give-a-new-agent-access).
+- Built-in, read-only managed policies: *Owner lifecycle*, *Self-service OAuth connections* (users manage their own connections), and *Agent capability ceiling* (agents can never mint credentials or control OAuth clients, providers, DCR settings, or the token vault). *Owner lifecycle* lets a user get, update and delete the agents, MCP servers, LLM providers, guardrails, budgets and secrets **they** created, update the triggers they created, list and manage their own API keys, and **invoke** an agent or an LLM provider they created. It stops short of creates — a create authorizes a payload that records no creator yet — and of agent credentials and sessions, which record no creator at all.
+- **No policy is created for a new agent**; bind one (see [Give a new agent access](#give-a-new-agent-access)). An older agent may carry an editable `Agent grant: <agent-name>` policy, which isn't recreated once deleted.
+
+## Secrets
+
+A credential that an LLM provider, MCP server, OAuth provider, OAuth client, trigger or agent names is held in the ADP **secret store** and referenced by ID, so the credential lives in one place and a rotation is one edit rather than one per resource. (A user's own OAuth tokens are not secrets in this sense: those live in the token vault behind **Connections**.) Manage secrets with `rpk ai secret` (see [rpk-ai.md](rpk-ai.md#secret-subcommands)) or under **Secrets store** in the UI sidebar.
+
+- **Shape.** An ID starts with a letter and holds uppercase letters, digits and underscores, up to 255 characters, and is immutable — `OPENAI_API_KEY`, not `openai-api-key`. The value is the credential itself, up to 64 KiB, and is **write-only**: nothing reads it back, in the UI or the CLI, so a lost value is replaced rather than recovered. Tags are key/value pairs for organizing and for policy conditions (see [Tags on ADP resources](#tags-on-adp-resources)).
+- **The UI takes a multi-line value.** Pick *Single line* for an API key or token (no leading or trailing whitespace), or *Multiline* for a PEM key or a JSON document, where the form drops one final line break. The credential fields on provider, server and OAuth-provider forms can also store a new value in place, which lands in the same store.
+- **What the pickers show.** A credential picker lists only this store's secrets, the ones the AI Gateway can read; a secret Redpanda Cloud holds for another product does not appear, and a new secret cannot reuse its name.
+- **A rotation does not require touching the resources.** They keep referencing the ID, and how soon each picks up the new value differs: **within about five minutes** for OpenAI, Anthropic and Google providers, **on the next request** for Amazon Bedrock providers, **on the next call** for self-managed MCP servers authenticating with a static key or service-account OAuth, and **within about ten minutes** for a managed MCP server that uses a secret.
+- **Deleting is unchecked and permanent.** Nothing verifies whether a resource still references the secret; those resources keep the reference and fail at their next call. Find and repoint them first.
+- **Who can manage them.** Policies name `Secret.create`, `Secret.get`, `Secret.list`, `Secret.update` and `Secret.delete`; the permissions are `dataplane_adp_secret_*`. Admin and the *Standard* and *Full access* templates carry all five; *Read only* and *Sandboxed* carry `get` and `list`. The built-in *Owner lifecycle* policy adds get, update and delete on the secrets **you** created, so no per-person grant is needed for your own. `Secret.get` and `Secret.list` disclose a secret's ID and tags, never its value; to limit someone to a subset, condition the policy on the secret's tags.
+
+## Tags on ADP resources
+
+Tags are key/value labels that let a policy or a report act on a whole team or environment instead of a list of resource names. Agents, MCP servers, LLM providers, guardrails, budgets and secrets all carry them, and a policy can also read the tags on OAuth clients, OAuth providers and policies.
+
+All six are settable in the UI — an agent under **Advanced** → **Tags** on the create canvas and on its Settings tab, an MCP server, LLM provider, guardrail, budget or secret in the **Tags** section of its create form and its edit form or Settings tab. With `rpk ai`: `--tag` on `agent create` / `update`, `--tags` on `mcp-server` and `llm-provider` `create` / `update`, `--tag` on `secret create` / `update`, and `--remove-tag` on `secret update`. For guardrail and budget tags, use the UI unless `rpk ai --help` shows a group for them.
+
+- **Limits.** At most 50 pairs per resource, values up to 256 characters, both halves required. An entry whose key already exists replaces that key's value.
+- **A write replaces the whole map.** `--tags` on a provider or server update, and a save in the UI, send the full set, so keep the pairs you want. `rpk ai secret update` is the exception: it merges `--tag` onto the stored tags and drops only what `--remove-tag` names.
+- **Three consumers, one set of tags.** Policies condition on them, cost reporting groups by them, and lists filter on them. Only the **calling agent's** tags are stamped on an LLM call, never the provider's or the server's, and a call made outside an agent carries none. A budget's own tags do not decide which agents it covers — its target agent does.
+- **Lists.** The agents, MCP servers, LLM providers, guardrails and secrets lists show a Tags column (the first to drop on a narrow window); the agents and secrets lists also carry a `Tag` filter matching one `key=value` pair.
+- Keep keys consistent across resource types (one `team` key on agents, servers and providers) so one policy and one spend report cover a team's whole footprint, keep values lowercase (a condition compares exactly), and tag at creation — an untagged resource falls outside every policy and report that relies on the tag. Never put secrets or PII in tag values.
 
 ## API keys
 
-An **API key** is a long-lived credential that authenticates requests to ADP as **the user who created it**, for cases where a browser sign-in and a short-lived token are awkward: a desktop AI client that reads a key from its configuration, a long-running script, a workstation tool. Every `rpk ai run` session uses one (see [rpk-ai.md](rpk-ai.md#the-session-credential-is-an-adp-api-key)). For a caller that should be a service account rather than a person — an application, a CI job — use OIDC client credentials instead. Keys are managed in the UI only, under **API keys** in the sidebar; there is no `rpk ai` command group for them.
+An **API key** is a long-lived credential that authenticates requests to ADP as **the user who created it**, for cases where a browser sign-in and a short-lived token are awkward: a desktop AI client that reads a key from its configuration, a long-running script, a workstation tool. Every `rpk ai run` session uses one (see [rpk-ai.md](rpk-ai.md#the-session-credential-is-an-adp-api-key)). For a caller that should be a service account rather than a person — an application, a CI job — use OIDC client credentials instead. Keys are managed in the UI, under **API keys** in the sidebar; check `rpk ai --help` before assuming no CLI group covers them.
 
 - **Lifecycle.** A key takes a name (name it after the client *and* the machine holding it, so you can tell which to delete later) and an expiration: 1 day, 7 days, 30 days, 90 days, a date you pick, or Never — the default is 30 days. The value is shown **once**; ADP stores only a hash, so a lost key is replaced, not recovered. The expiration is **fixed at creation**: to change it, create a new key and delete the old. Renaming is API-only.
 - **Review and revoke.** The list shows each key's prefix and last four characters, its expiry, last use, and creator; an expired key stays listed, marked Expired, until deleted. Deleting is permanent and takes effect within a minute. You see your own keys by default; filtering by creator needs the administrative permissions below.
@@ -283,11 +306,11 @@ Transforms:
 - **Argument limits** (request): numeric min/max, string length, RE2 pattern, format, allowed values, array item count. Violations are rejected with an error naming the argument, and the limits are merged into the tool's advertised input schema.
 - **Row filters** (response): name the array path (`$.body`, `$.result`, or `$`) and a predicate such as `@.priority >= 8` or `@ != "restricted"`. Elements the predicate can't evaluate never survive; predicates on the same array conjoin.
 
-**Preview in the UI:** the **Configuration** tab shows the composed effect for the selected tool across all of the server's policies (including unsaved edits); the **Preview** tab runs sample request and response data through the live shaping code, side by side, and shows masked/dropped/added/filtered counts or a "would be denied" banner.
+In the UI, the **Configuration** tab shows the composed effect for one tool across all of the server's policies, and the **Preview** tab runs sample data through the live shaping code before you save.
 
-**A mask hides values, not which records hold them.** On a server that also exposes its data as read-only SQL tables, a caller who can run `execute_query` can filter on a masked column that the table declares filterable, and whether any rows come back tells them whether the value they filtered for exists. Treat a mask as value-hiding only. To stop a caller learning which records exist, withhold `execute_query` from them rather than relying on the mask. The remedy is an access policy that denies `McpServerTool.call` on that one tool, and the single-tool Cedar form is published: see [Deny one tool on one MCP server](#deny-one-tool-on-one-mcp-server). Remember the `when` clause that pins the server, or the deny covers every server with a tool of that name. See [mcp-servers.md](mcp-servers.md#sql-table-exposure-on-a-managed-connector).
+**A mask hides values, not which records hold them.** On a server that also exposes its data as read-only SQL tables, a caller who can run `execute_query` can filter on a masked column the table declares filterable, and whether rows come back tells them whether that value exists. To stop that, deny `McpServerTool.call` on `execute_query` for those callers with [the single-tool Cedar form](#deny-one-tool-on-one-mcp-server), keeping the `when` clause that pins the server, or the deny covers every server with a tool of that name. See [mcp-servers.md](mcp-servers.md#sql-table-exposure-on-a-managed-connector).
 
-Other limits: on legacy SSE self-managed servers, calls matching a policy with response rules are denied. A *Not enforced here* badge means rules save but don't apply on that gateway. The audit log records each matching data policy as Blocked, Masked, or Passed.
+Other limits: on legacy SSE self-managed servers, calls that match a policy with response rules are denied. A *Not enforced here* badge means rules save but don't apply on that gateway. The audit log records each matching data policy as Blocked, Masked, or Passed.
 
 ## OAuth and identity
 
@@ -324,13 +347,7 @@ Admission modes: `open` (anonymous registration, still rate-limited and capped) 
 
 **Client ID Metadata Documents (CIMD)** — **UI only** (no CLI command): **Integrations setup** → **Inbound clients** → **Self-registration** → *Accept client metadata documents (CIMD)*. The client's `client_id` is an HTTPS URL hosting a JSON metadata document; nothing is persisted and the client does not appear in the client list.
 
-| Setting | Behavior |
-|---|---|
-| *Accept client metadata documents (CIMD)* | On/off. Off: URL `client_id`s are refused and discovery metadata doesn't advertise support. |
-| *Trusted document domains* | *Any domain* or *Only these domains*. A listed domain also covers its subdomains; bare public suffixes are rejected. |
-| *Allowed resources* | MCP URLs CIMD clients may request tokens for, or any MCP server on the gateway. Turning CIMD on seeds "any"; the UI refuses to save an empty list. |
-
-CIMD works only when **all three** hold: the switch is on, *Allowed resources* is non-empty (a stored empty list behaves exactly like off: no advertisement, URL client IDs refused, DCR fallback preserved), and the gateway can fetch metadata documents. If the settings show *Not active on this gateway*, the last condition fails and only the gateway operator can fix it. Allowed-resources matching is exact: copy each URL from the server's **Connection** tab, drop trailing slashes, and list a code-mode server's `Code mode URL` separately (see [mcp-servers.md](mcp-servers.md)). Because CIMD clients are admitted with no admin seeing them, prefer *Only these domains* and keep *Allowed resources* narrow.
+Its settings are *Trusted document domains* (*Any domain*, or *Only these domains*, which also covers subdomains) and *Allowed resources* (the MCP URLs CIMD clients may request tokens for, or any MCP server on the gateway). **Turning CIMD on sets *Allowed resources* to any server**, so narrow it right away. CIMD works only when the switch is on, *Allowed resources* isn't empty, and the gateway can fetch metadata documents; *Not active on this gateway* means the last condition fails, which only the gateway operator can fix. Resource matching is exact: copy each URL from the server's **Connection** tab, drop trailing slashes, and list a code-mode URL separately. Because CIMD admits clients no admin sees, prefer *Only these domains* and keep *Allowed resources* narrow.
 
 ### OAuth providers (outbound)
 
@@ -342,19 +359,12 @@ User-configured settings: name (positional, immutable), display name, authorizat
 
 *Discover from MCP server URL* (CLI `--register-from-url`) points Redpanda at a remote MCP server and lets it work out the upstream OAuth setup. Registering this gateway as a client with the upstream authorization server follows a ladder, in order:
 
-1. **Credentials you supply** — the client ID and client-secret reference you enter yourself.
-2. **Client ID Metadata Documents (CIMD)**, where the upstream authorization server advertises support. The gateway identifies itself by the HTTPS URL of a metadata document it publishes about itself; that URL *is* the `client_id`. Nothing is registered upstream, which is why this rung is tried before DCR.
-3. **Dynamic Client Registration (RFC 7591)**, where the upstream offers a registration endpoint.
-4. **Manual setup** — you register the client with the upstream yourself and enter its credentials.
+1. **Credentials you supply** (a client ID and client-secret reference).
+2. **CIMD**, where the upstream advertises it: the gateway's `client_id` is the HTTPS URL of a metadata document it publishes, so nothing is registered upstream.
+3. **DCR (RFC 7591)**, where the upstream offers a registration endpoint.
+4. **Manual setup**: you register with the upstream yourself.
 
-What follows from that:
-
-- An upstream whose OAuth setup supports **only** CIMD, with no DCR, connects through this same discovery flow; it does not need manual setup.
-- A CIMD `client_id` is a public document URL, not a secret. It is the identity the upstream vendor sees, so it is the value to hand over for an allowlist, and the URL to open when an authorization request is rejected. Discovery reports it.
-- CIMD needs this deployment to know its own external HTTPS address. Where it cannot, discovery falls back to the DCR rung.
-- `rpk ai oauth-provider get <name> -o yaml` marks a provider admitted on the CIMD rung with `cimd_client: true`. It is set by the system at creation and is not a field you write. Such a provider holds no client registration at the upstream authorization server.
-
-This is the **outbound** direction. The separate inbound setting that admits *other* clients to this gateway by metadata document is [above](#inbound-client-registration-dcr-and-cimd); the two are independent.
+So a CIMD-only upstream still connects through discovery. A CIMD `client_id` is a public URL, not a secret, and it's the value to give the upstream vendor for an allowlist. Where the deployment doesn't know its own external HTTPS address, discovery falls back to DCR. `rpk ai oauth-provider get <name> -o yaml` marks such a provider `cimd_client: true` (system-set). This outbound flow is independent of the [inbound](#inbound-client-registration-dcr-and-cimd) setting.
 
 #### Slack: whose identity the connection acts as (`slack_token_type`)
 

@@ -30,6 +30,16 @@ the skills use to look up config fields, flags, and procedures. Without signing 
 few lookups a day. Run `/mcp`, select `redpanda-docs`, and sign in with your Redpanda Cloud
 account to remove the limit.
 
+### Keep the skills up to date
+
+The skills change as the products do. Claude Code doesn't auto-update plugins from this
+marketplace unless you turn it on: run `/plugin`, open the **Marketplaces** tab, select
+`redpanda-skills`, and select **Enable auto-update**. To update by hand:
+
+```bash
+claude plugin marketplace update redpanda-skills && claude plugin update redpanda@redpanda-skills
+```
+
 ## What is this?
 
 This repo is a Claude Code **plugin** named `redpanda`. When installed, every skill is

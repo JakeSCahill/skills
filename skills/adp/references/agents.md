@@ -1,12 +1,8 @@
-Source: `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`agent`, `agent a2a`, `agent a2a send`, `agent a2a task watch`, `trigger` sections), `cloudv2 apps/rpai/internal/cmd/agent/` (positional arguments), `docs modules/reference/partials/rpk-ai/` (`rpk-ai-agent-create`, `-update`, `-credential-create`, `-transcript-list` flag tables), `adp-docs modules/connect/pages/create-agent.adoc`, `self-managed-agents.adoc`, `concepts.adoc`, `triggers/overview.adoc`, `adp-docs modules/monitor/pages/monitor-agents.adoc` (session history), `adp-docs modules/cli/pages/gitops.adoc` — verified 2026-09-23. Write-time validation, subagent, tag and agent-card behavior carried forward from the earlier source-verified revision and cross-checked against `create-agent.adoc` on 2026-09-23. Maturity re-verified 2026-09-28 against `adp-docs modules/reference/pages/rpk/rpk-ai/` and `modules/cli/pages/index.adoc` (no Preview attribute on the `rpk ai` pages). Sync 2026-10-05: the no-access-at-create behavior, its stderr notice and the stdout/`-o json` split verified against `cloudv2 apps/rpai/internal/cmd/agent/create.go` and `agent/cmd_test.go`; the A2A exit codes re-verified against `cloudv2 apps/rpai/internal/cmd/root.go` (`exitCode`), `apps/rpai/internal/cmd/exit_test.go` and `adp-docs modules/cli/pages/index.adoc`. Reasoning-effort retention on a UI model change verified 2026-10-05 against `adp-docs modules/connect/pages/create-agent.adoc` (the Settings-tab paragraph: kept only where the new model's catalog capabilities list it, cleared to the provider default otherwise, always cleared on an OpenAI-compatible provider, and a subagent model override still rejected at save). The no-policy-at-create wording re-checked 2026-10-05 against `adp-docs modules/connect/pages/create-agent.adoc` (Create the agent) and `modules/control/pages/access-policies.adoc` (Grant an agent its own permissions): both state that a new agent has no policy of its own, neither states that its runtime calls are refused, and the self-managed UI exception comes from the latter. `--ttl 0` re-verified at adp/v0.2.86 (2026-10-15): cloudv2 `apps/rpai/internal/cmd/agent/credential.go` sends `expires_at` only when ttl > 0, and `apps/aigw/config/config.go` `SecretDefaultTTL` (must be > 0, enforced in `apps/aigw/internal/server/server.go`) applies when it is omitted.
+Source: `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`agent`, `a2a`, `trigger`), `cloudv2 apps/rpai/internal/cmd/agent/`, `docs modules/reference/partials/rpk-ai/`, `adp-docs modules/connect/pages/` (`create-agent.adoc`, `self-managed-agents.adoc`, `concepts.adoc`, `triggers/`), `modules/monitor/pages/monitor-agents.adoc`, `modules/cli/pages/gitops.adoc`. Full per-claim mapping and the dated verification log: the `references/agents.md` rows of `SOURCES.md`.
 
 # Agentic Data Plane Agents Reference
 
 **Maturity:** Redpanda Agentic Data Plane is generally available, and so is the `rpk ai` CLI. Command groups and flags still change between releases, so confirm flags with `--help` before relying on them.
-
-Audience: an AI agent operating Agentic Data Plane agents through `rpk ai` and the ADP UI (ai.redpanda.com). Optimize for correct programmatic use.
-
-Related references: [SKILL.md](../SKILL.md), [mcp-servers.md](mcp-servers.md), [gateway-and-providers.md](gateway-and-providers.md), [governance.md](governance.md), [rpk-ai.md](rpk-ai.md), [observability.md](observability.md).
 
 ## Discover the live surface
 
@@ -48,7 +44,7 @@ Both types share one registry, the same governance views, and the same cost attr
 | `transcript list\|get` | Conversation transcripts (see [observability.md](observability.md)) |
 | `a2a card\|send\|task` | Talk to a running agent over A2A (see [A2A](#a2a-endpoint-and-agent-card)) |
 
-**A new agent starts with no policy of its own.** `rpk ai agent create` writes no policy for the agent. It prints a notice on **stderr** saying the agent has no access until a policy names it, with the two commands that bind one, and leaves stdout as the created object so `-o json` stays parseable. In the UI, a managed agent's **Permissions** tab warns until you author its first policy; registering a self-managed agent in the UI is the exception, because its required **Access** section writes that policy for you. Bind a built-in template with `rpk ai policy create --agent <name> --template sandboxed`, or supply Cedar whose principal is that agent. See [governance.md](governance.md#give-a-new-agent-access).
+**A new agent starts with no policy of its own.** `rpk ai agent create` writes no policy for the agent. It prints a notice on **stderr** saying the agent has no access until a policy names it, with the two commands that bind one, and leaves stdout as the created object so `-o json` stays parseable. In the UI, a managed agent's **Permissions** tab warns until you author its first policy; registering a self-managed agent in the UI is the exception, because its required **Access** section writes that policy for you. Bind a built-in template with `rpk ai policy create --agent <name> --template sandboxed`, or supply Cedar whose principal is that agent. Its **creator** can invoke it meanwhile, through the built-in *Owner lifecycle* policy, which is enough to test the agent but grants nothing to anyone else and is not the agent's own access. See [governance.md](governance.md#give-a-new-agent-access).
 
 Scalar flags on `create` / `update`: `--display-name`, `--description`, `--model`, `--llm-provider`, `--system-prompt`, `--max-iterations`, `--mcp-server` (repeatable), `--tag key=value` (repeatable; on `update` it replaces the whole tag map). `create` also takes `--self-managed` and `--spec-file <json|yaml>`, which loads a complete managed spec and is the only create-time way to set subagents or an agent card; `--spec-file` is mutually exclusive with `--self-managed` and the scalar spec flags. For anything the flags cannot express on an existing agent (subagents, agent card, reasoning effort), edit the manifest and `rpk ai agent apply -f`.
 
@@ -63,15 +59,9 @@ Every agent carries, independent of type:
 | `name` | Immutable ID, a lowercase slug up to 63 characters. The UI derives it from the display name (adding a suffix on collision); check it on the Settings tab after create |
 | `display_name` | Up to 128 characters |
 | `description` | Up to 1,024 characters; an internal note, not the system prompt |
-| `tags` | Key/value map, up to 50 pairs, each value up to 256 characters |
+| `tags` | Key/value map, up to 50 pairs, each value up to 256 characters. Set with `--tag` on `create` / `update`, or in the UI under **Advanced** → **Tags** on the create canvas and on the Settings tab |
 
-`tags` does three jobs at once, so adding or removing a key affects all three:
-
-- **Access policies** — Cedar policies can condition on an agent's tags (`resource.getTag("team")`, `resource.hasTag("team")`); see [governance.md](governance.md).
-- **Organization** — filter agents in the registry by tag.
-- **Cost grouping** — the gateway stamps the agent's tags on each LLM call it makes, so spend can be grouped and filtered by tag (see [governance.md](governance.md)). Attribution is point-in-time: spend already recorded keeps the tags it had.
-
-Do not put secrets or PII in tag values; they surface in cost reports.
+`tags` does three jobs at once, so adding or removing a key affects all three: Cedar policies can condition on them (`resource.getTag("team")`, `resource.hasTag("team")`), the registry filters on them, and the gateway stamps them on each LLM call the agent makes, so spend groups by them. Only the **calling agent's** tags are recorded on a call, never the provider's or server's, and attribution is point-in-time: spend already recorded keeps the tags it had. Do not put secrets or PII in tag values; they surface in cost reports. See [governance.md](governance.md#tags-on-adp-resources).
 
 ## Managed agent spec
 
@@ -87,7 +77,6 @@ Manifest fields under `managed.spec` (also the shape `--spec-file` accepts). The
 | `subagents` | no | Map keyed by subagent name, up to 16 entries (see [Subagents](#subagents)) |
 | `agent_card` | no | A2A discovery metadata (see [A2A](#a2a-endpoint-and-agent-card)) |
 | `reasoning.effort` | no | Provider-owned string; omit for the provider default (see [Reasoning effort](#reasoning-effort)) |
-| `reasoning_effort` | no | **Deprecated**; use `reasoning.effort` |
 
 There is no `tools` field on an agent: agents reach tools only through `mcp_servers`.
 
@@ -110,7 +99,7 @@ Create and update validate a managed spec's references before saving, so a bad r
 
 Scoping rules:
 
-- **OpenAI-compatible providers are not model-checked** at write time; any identifier saves, and the gateway enforces the model per request.
+- **OpenAI-compatible and Gemini Enterprise Agent Platform providers are not model-checked** at write time; any identifier saves, and the gateway enforces the model per request, refusing one the provider does not allow. A managed agent can run on a Gemini Enterprise Agent Platform provider, so expect a model mistake there to surface at the first call rather than at save time.
 - **Non-Bedrock catalog providers get only the catalog check.** Their allowlist is enforced by the gateway at request time (`403 model_not_allowed`).
 - **Updates validate only the pairings they change**, so an agent that already stores an out-of-catalog model stays editable. A partial update that changes only a model is still checked against the provider it inherits.
 - Rarely, an update fails with a `changed while the update was in flight; retry` message; retry the update.
@@ -127,14 +116,14 @@ A retired model disappears from the provider's catalog, but an agent already usi
 
 **Validation.** When an effort is set, every effective model pairing must accept it:
 
-- A model that does not list the value fails with `model "…" does not support reasoning effort <value>`; several offending models are reported together. The error addresses whichever field you wrote (`agent.managed.spec.reasoning.effort` or the deprecated `agent.managed.spec.reasoning_effort`).
+- A model that does not list the value fails with `model "…" does not support reasoning effort <value>`; several offending models are reported together.
 - On an **OpenAI-compatible** provider any explicit effort is rejected; leave it unset.
 - A model the gateway cannot resolve is an invalid-argument error; a lookup that cannot complete fails as unavailable (retry).
 - Updates check only the pairings they change. Leaving the effort unset is always accepted.
 
 **Changing the agent's model from the UI clears an effort the new model will not take.** On the **Settings** tab, picking a new model for the agent itself keeps the stored effort only if that model's catalog capabilities list it; otherwise the effort falls back to the provider default and the save goes through, so a model change is never blocked by a level the new model does not offer. Switching the agent to an OpenAI-compatible provider always clears it. This is the one path that drops an effort silently — re-apply the manifest if you want a specific level on the new model, and re-read the agent rather than assuming the level survived. A **subagent's** model override is not adjusted this way: pick a subagent model that does not accept the agent's effort and the save is still rejected with the validation error above.
 
-**Deprecated `reasoning_effort`.** Older manifests may set the closed `reasoning_effort` enum. It is still accepted and kept in step with `reasoning.effort` (`reasoning.effort` wins on read; a provider value the enum cannot represent leaves the enum unspecified). Setting the two to different values fails with `reasoning effort fields must not conflict`. Use `reasoning.effort` for new work.
+An older manifest's deprecated `reasoning_effort` is still accepted. Write `reasoning.effort`, and never set both to different values.
 
 ## Subagents
 

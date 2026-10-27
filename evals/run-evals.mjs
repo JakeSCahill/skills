@@ -448,6 +448,9 @@ async function grade(testCase, response, opts, calls = []) {
   for (const p of testCase.required_patterns ?? []) {
     if (!regex(p).test(response)) return { passed: false, reason: `missing required pattern /${p}/`, cost: 0 };
   }
+  // Without the judge, invariants are not checked, so the answer has not been
+  // graded and must not count as a pass.
+  if (!opts.judge && testCase.invariants?.length) return { passed: false, ungraded: true, reason: "invariants not judged (--no-judge)", cost: 0 };
   let cost = 0;
   if (opts.judge) {
     for (const inv of testCase.invariants ?? []) {
@@ -481,13 +484,23 @@ async function pool(tasks, limit) {
 const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : "n/a");
 
 function tally(rows) {
-  const scored = rows.filter((r) => r.status !== "errored");
-  return { passed: scored.filter((r) => r.status === "passed").length, scored: scored.length, errored: rows.length - scored.length };
+  const scored = rows.filter((r) => r.status === "passed" || r.status === "failed");
+  const errored = rows.filter((r) => r.status === "errored").length;
+  return { passed: scored.filter((r) => r.status === "passed").length, scored: scored.length, errored, ungraded: rows.length - scored.length - errored };
+}
+
+// Errors are not random: quota refusals and timeouts land on the docs arms'
+// hardest runs. So a cell is scored only when at most one planned run is
+// missing, and never from zero runs.
+function incomplete(t) {
+  const unscored = t.errored + t.ungraded;
+  return unscored > 1 || (unscored > 0 && t.scored === 0);
 }
 
 // A case is informative only if the baseline mostly fails it. One a competent
 // model already answers says nothing about the skill or the docs.
 function caseVerdict(byArm) {
+  if (Object.values(byArm).some(incomplete)) return "incomplete";
   const rate = (arm) => {
     const t = byArm[arm];
     return t && t.scored ? t.passed / t.scored : undefined;
@@ -509,8 +522,10 @@ function summarize(suites, results, opts, meta) {
   lines.push(`- Started: ${meta.started}`);
   lines.push(`- Subject model: ${opts.model}; judge model: ${opts.judge ? opts.judgeModel : "off"}`);
   lines.push(`- Runs per arm: ${opts.runs}; docs server: ${DOCS_MCP_URL}`);
+  lines.push(`- Errored runs: ${opts.arms.map((a) => { const t = tally(results.filter((r) => r.arm === a)); return `${a} ${t.errored}/${t.scored + t.errored + t.ungraded}`; }).join(", ")}`);
   lines.push(`- Total cost: $${meta.cost.toFixed(2)}`, "");
   const verdicts = {};
+  const verdictOf = new Map();
   for (const suite of suites) {
     lines.push(`## ${suite.skill}`, "");
     lines.push(`| Case | ${opts.arms.join(" | ")} | Verdict |`);
@@ -525,6 +540,7 @@ function summarize(suites, results, opts, meta) {
         const t = byArm[arm];
         let cell = `${t.passed}/${t.scored}`;
         if (t.errored) cell += ` (${t.errored} err)`;
+        if (t.ungraded) cell += ` (${t.ungraded} ungraded)`;
         if (arm === "docs" || arm === "both") {
           const unused = rows.filter((r) => r.arm === arm && r.status !== "errored" && r.docsCalls === 0).length;
           if (unused) cell += ` (${unused} no lookup)`;
@@ -532,10 +548,11 @@ function summarize(suites, results, opts, meta) {
         return cell;
       });
       const v = caseVerdict(byArm);
+      verdictOf.set(`${suite.name}/${testCase.id}`, v);
       const origin = testCase.origin ?? "unspecified";
       verdicts[origin] ??= {};
       verdicts[origin][v] = (verdicts[origin][v] ?? 0) + 1;
-      if (!v.startsWith("uninformative")) {
+      if (v !== "incomplete" && !v.startsWith("uninformative")) {
         for (const arm of Object.keys(informative)) {
           if (byArm[arm]) {
             informative[arm][0] += byArm[arm].passed;
@@ -570,6 +587,7 @@ function summarize(suites, results, opts, meta) {
   const gaps = { docs: [], skill: [] };
   for (const suite of suites) {
     for (const testCase of suite.test_cases) {
+      if (verdictOf.get(`${suite.name}/${testCase.id}`) === "incomplete") continue;
       const rows = results.filter((r) => r.suite === suite.name && r.case === testCase.id);
       const [base, skill, docs] = ["baseline", "skill", "docs"].map((a) => rateOf(rows, a));
       if (base !== undefined && base > 1 / 3) continue;
@@ -585,7 +603,7 @@ function summarize(suites, results, opts, meta) {
   lines.push(`## Case verdicts by origin`, "");
   for (const [origin, counts] of Object.entries(verdicts)) {
     lines.push(`**${origin}**`, "");
-    for (const [v, n] of Object.entries(counts)) lines.push(`- ${v || "incomplete"}: ${n}`);
+    for (const [v, n] of Object.entries(counts)) lines.push(`- ${v || "not all arms run"}: ${n}`);
     lines.push("");
   }
   const failures = results.filter((r) => r.status !== "passed");
@@ -611,12 +629,13 @@ function report(opts) {
   const cells = new Map();
   for (const r of rows) {
     const k = `${r.suite}/${r.case}/${r.arm}`;
-    const id = `${r.skillHash ?? "-"} ${r.model ?? "?"}`;
+    // judgeModel is null for --no-judge rows and absent from older rows; keep both distinct.
+    const id = `${r.skillHash ?? "-"} ${r.model ?? "?"} ${r.judgeModel}`;
     if (!cells.has(k)) cells.set(k, new Set());
     cells.get(k).add(id);
   }
   const mixed = [...cells].filter(([, ids]) => ids.size > 1).map(([k]) => k);
-  if (mixed.length) die(`refusing to pool runs of different skill text or models in: ${mixed.slice(0, 5).join(", ")}${mixed.length > 5 ? ", ..." : ""}`);
+  if (mixed.length) die(`refusing to pool runs of different skill text, models or judges in: ${mixed.slice(0, 5).join(", ")}${mixed.length > 5 ? ", ..." : ""}`);
   const models = [...new Set(rows.map((r) => r.model ?? "unrecorded"))].join(", ");
   const judges = [...new Set(rows.map((r) => r.judgeModel ?? "unrecorded"))].join(", ");
   opts = { ...opts, model: models, judgeModel: judges };
@@ -673,7 +692,7 @@ async function main() {
     opts.concurrency
   );
   if (skippedControl.length) {
-    console.log(`⚠️  --no-judge: ${skippedControl.length} invariant-only case(s) are ungraded and will pass: ${skippedControl.join(", ")}\n`);
+    console.log(`⚠️  --no-judge: ${skippedControl.length} invariant-only case(s) are ungraded and will not be scored: ${skippedControl.join(", ")}\n`);
   }
   if (cannotFail.length) {
     die(`these cases pass an answer that says nothing, so they cannot fail:\n   ${cannotFail.join("\n   ")}`);
@@ -699,7 +718,7 @@ async function main() {
               const subject = await runSubject(suite, testCase, arm, opts.model);
               const g = await grade(testCase, subject.text, opts, subject.mockCalls);
               Object.assign(row, {
-                status: g.passed ? "passed" : "failed",
+                status: g.passed ? "passed" : g.ungraded ? "ungraded" : "failed",
                 reason: g.reason,
                 docsCalls: subject.docsCalls,
                 usage: subject.usage,
@@ -717,7 +736,7 @@ async function main() {
             }
             cost += row.cost;
             log.write(JSON.stringify(row) + "\n");
-            const mark = { passed: "✅", failed: "❌", errored: "⚠️ " }[row.status];
+            const mark = { passed: "✅", failed: "❌", errored: "⚠️ ", ungraded: "➖" }[row.status];
             console.log(`${mark} ${suite.skill}/${testCase.id} ${arm} #${run}${row.status === "passed" ? "" : `: ${row.reason}`}`);
             return row;
           });
@@ -737,4 +756,8 @@ async function main() {
   if (errored) console.log(`⚠️  ${errored} run(s) errored and were not scored.`);
 }
 
-main().catch((e) => die(e.stack ?? String(e)));
+export { tally, caseVerdict, grade };
+
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => die(e.stack ?? String(e)));
+}

@@ -1,12 +1,8 @@
-Source: `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`mcp-server`, `mcp-server create`, `mcp-server tools list|call`, `mcp-server types`, `mcp-server get` and error sections), `adp-docs modules/connect/pages/create-server.adoc`, `data-policies.adoc`, `user-delegated-oauth.adoc`, `remote-mcp-clients.adoc`, `oauth-providers.adoc`, `managed/slack.adoc`, `managed/managed-catalog.adoc`, `adp-docs modules/gateway/pages/code-mode.adoc` — verified 2026-09-23. The per-method `user_oauth` gating and `response_format` fail-open behavior are carried forward from the earlier source-verified revision and cross-checked against `user-delegated-oauth.adoc` and `create-server.adoc` on 2026-09-23. SQL table exposure on a managed connector and the `scope_upgrade_required` remedy verified 2026-09-28 against `adp-docs modules/connect/pages/managed/jira.adoc` and the user-delegated OAuth scope guidance in `modules/connect/pages/managed/` and `user-delegated-oauth.adoc`. Sync 2026-10-05: the mask-versus-row-membership limit on SQL table exposure verified against `adp-docs modules/connect/pages/data-policies.adoc` (Limitations) and `modules/connect/pages/managed/jira.adoc` (the filterable columns of each table). The tool-call remedy checked 2026-10-05 against `adp-docs modules/connect/pages/data-policies.adoc` (Limitations: deny `McpServerTool.call` on that one tool) and `modules/control/pages/access-policies.adoc` (the only tool resource form shown is per-server, Specific resource scoping a child type to the children of one parent); no single-tool resource form is published. Sync 2026-10-12: the per-tool deny remedy for the mask-versus-row-membership limit is now published, and the Cedar form (tool entity plus the `when` clause pinning one server, and why the clause is required) is verified against `adp-docs modules/control/pages/access-policies.adoc` (Deny one tool on an MCP server) and the cross-reference added to `modules/connect/pages/data-policies.adoc` (Limitations). This resolves the TODO this file carried about the unpublished single-tool resource form.
+Source: `cloudv2 apps/rpai/testdata/commands-snapshot.md` (`mcp-server` group), `adp-docs modules/connect/pages/` (`create-server.adoc`, `data-policies.adoc`, `user-delegated-oauth.adoc`, `remote-mcp-clients.adoc`, `oauth-providers.adoc`, `managed/`), `modules/gateway/pages/code-mode.adoc`, `modules/control/pages/` (`access-policies.adoc`, `tags.adoc`). Full per-claim mapping and the dated verification log: the `references/mcp-servers.md` rows of `SOURCES.md`.
 
 # Agentic Data Plane MCP Servers Reference
 
 **Maturity:** Redpanda Agentic Data Plane is generally available, and so is the `rpk ai` CLI. Output format and data policies are Preview capabilities, and individual managed types carry their own maturity badges in the managed catalog; confirm the badge in the UI or docs rather than assuming GA.
-
-Audience: an AI agent operating Agentic Data Plane MCP servers through `rpk ai mcp-server` and the ADP UI (ai.redpanda.com), and connecting MCP clients to them.
-
-Related references: [SKILL.md](../SKILL.md), [agents.md](agents.md), [gateway-and-providers.md](gateway-and-providers.md), [governance.md](governance.md), [rpk-ai.md](rpk-ai.md), [observability.md](observability.md).
 
 For the separate `rpk cloud mcp` control-plane server, see /redpanda:rpk-cloud.
 
@@ -50,7 +46,7 @@ As they appear in flags and `get -o yaml`:
 | backend | `--remote.*` or `--managed.config` | Remote (a server you host, proxied by the gateway) or managed (hosted by Redpanda). The flag group you use selects it; mixing groups is an error. Immutable |
 | `enabled` | `--enabled` | **The CLI creates a server disabled unless you pass `--enabled`**; the UI creates it enabled. A disabled server rejects every request, connection attempts included |
 | `description` | `--description` | Up to 256 characters |
-| `tags` | `--tags key=value` (repeatable) | Up to 50 pairs, values up to 256 characters; for filtering and tag-based access-policy conditions. An update replaces the whole map. No UI field. No secrets or PII |
+| `tags` | `--tags key=value` (repeatable) | Up to 50 pairs, values up to 256 characters; for filtering and tag-based access-policy conditions. An update replaces the whole map. The UI has a **Tags** section too, last on the create form and on the edit form. No secrets or PII (see [governance.md](governance.md#tags-on-adp-resources)) |
 | `code_mode` | `--code-mode` | See [Code mode](#code-mode) |
 | `response_format` | `--response-format jton\|toon` | See [Output format](#output-format-token-optimization). Omitted = JSON |
 | `data_policies` | `--data-policies` (repeatable) | See [Data policies](#data-policies-preview). Returned by `get`, omitted by `list` |
@@ -61,7 +57,7 @@ Remote servers take `--remote.url` (alias `--url`) and `--remote.transport` (ali
 
 ## Remote auth modes
 
-A remote server uses exactly one of five auth modes; the flag group you set selects it. Managed types show only the modes that make sense for that type (SQL, for example, never offers user OAuth) and carry their auth shape inside `--managed.config`.
+A remote server uses exactly one of five auth modes; the flag group you set selects it. A managed type configures authentication inside its own `--managed.config` instead: it may offer some of the same modes, showing only those that make sense for the type (SQL, for example, never offers user OAuth), and the AWS types use none of them (see [Managed catalog](#managed-catalog)).
 
 | Mode | UI label | CLI flags | Behavior |
 |---|---|---|---|
@@ -181,6 +177,10 @@ rpk ai mcp-server create my-sql --enabled \
 
 Type-specific fields (including a `userOauth` block for types that support user-delegated OAuth) differ per type; take them from the type's setup guide or the UI form.
 
+**The AWS types can run with no stored credentials.** The AWS managed types authenticate either with AWS access keys held in the secret store or by **assuming an IAM role you create in the AWS account the environment runs in**, which keeps no AWS credential in ADP at all. The keyless mode needs the gateway to have an AWS identity, so it works only on an environment hosted on AWS and fails elsewhere. These types do not use the remote auth modes above. Read the AWS setup guide for the role, its trust policy, and the per-type configuration.
+
+**A managed type's `readonly` guardrail is the type's own, and the SQL type's now holds both tools to reads.** With `readonly` set, the SQL type disables `execute` outright *and* constrains `query`: it checks the statement text, then runs it in a transaction it never commits (opened read-only on PostgreSQL), so a write that slips past the text check still does not persist — `DELETE … RETURNING` through `query` fails rather than running. The text check is deliberately strict and refuses some legitimate reads: the statement must start with `SELECT`, `WITH`, `SHOW`, `VALUES` or `TABLE` (or `EXPLAIN` of one of those); a `;` other than a trailing one, and any write, DDL, grant, transaction or session-control keyword, is refused **wherever it appears, string literals and comments included**, the `CREATE` in `SHOW CREATE` being the one exception (so `… WHERE action = 'delete'` is refused — pass such values as query parameters, which the check does not read); `VALUE` after `NEXT` is refused (use `LIMIT`, not `FETCH NEXT`); and advisory-lock functions are refused by name, a safeguard rather than a guarantee. With `readonly` unset, `query` runs whatever it is given. Scope the database user's privileges too: grants are the one control that holds however the statement arrives.
+
 ### SQL table exposure on a managed connector
 
 Some managed types can present their data as read-only SQL tables in addition to their tools, so an agent can filter records the way it would query a database instead of paging through tool results. It is a per-server setting, **off by default** (UI: the **Enabled** toggle under **Queryable** in the server's configuration; CLI: the type's own field in `--managed.config`), so an existing server gains nothing until someone turns it on. Which types offer it changes, so read the type's configuration form or setup guide rather than assuming.
@@ -216,7 +216,7 @@ Keep the `when` clause: Cedar identifies a tool by name alone, so without it the
 
 On a managed connector that supports user-delegated OAuth, the per-user connection decides **which** stored credential is used, not necessarily **whose identity** the upstream call carries. Slack is the case where these differ, because one Slack authorization can issue both a bot token and a user token. The acting identity is fixed by the OAuth provider's **Slack OAuth token type** (`slack_token_type`), not by who owns the connection:
 
-- **`Bot User OAuth Token`** (the default, and what providers created before the setting existed keep): tools post, read, and react **as the app's bot user**, even on a user-OAuth server.
+- **`Bot User OAuth Token`** (the default): tools post, read, and react **as the app's bot user**, even on a user-OAuth server.
 - **`User OAuth Token`**: tools act **as the person who authorized**. Offered only when the provider uses Slack's standard OAuth v2 authorize and token endpoints, so not on a provider set up by discovery.
 - The setting is chosen at provider creation and is immutable, so serving both identities means two providers (they can share one Slack app). See [governance.md](governance.md#slack-whose-identity-the-connection-acts-as-slack_token_type).
 
