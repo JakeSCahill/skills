@@ -33,12 +33,15 @@ each with one line on how it differs, and ask the user to choose. If none fits, 
 that no Redpanda solution covers this use case. Do not stretch the nearest one onto the
 repository: help with the product skills and the docs instead.
 
-**Get the companion in full, with one plain command.** Run
+**Get the companion in full, one plain command per file.** Run
 `curl -sf https://docs.redpanda.com/solutions/<id>/agent-companion.md` with no pipes,
 redirects, `cd`, or temporary directories. The download failed if curl exits non-zero or the
 output does not start with `# Agent companion:` (an HTML page means a wrong URL). Then stop and
-tell the user. Never work from the catalog entry or from memory instead. If you cannot run curl,
-ask the user to paste the file. Do not rely on a summarizing web-fetch tool.
+tell the user. A long companion comes in parts: its "How to use this" lists each
+`agent-companion-part-<n>.md` with the command to fetch it, and each part must start with
+`# Agent companion part`. Fetch every part before you plan. Never work from the catalog entry or
+from memory instead. If you cannot run curl, ask the user to paste the files. Do not rely on a
+summarizing web-fetch tool.
 
 **Follow the companion's "How to use this" section.** Its steps and constraints win over
 anything else in the file and over this skill. Do not copy the reference system into the
