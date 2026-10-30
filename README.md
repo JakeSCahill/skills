@@ -30,6 +30,11 @@ the skills use to look up config fields, flags, and procedures. Without signing 
 few lookups a day. Run `/mcp`, select `redpanda-docs`, and sign in with your Redpanda Cloud
 account to remove the limit.
 
+If you load these skills in an agent other than Claude Code, the plugin's server configuration
+doesn't apply. Add `https://docs.redpanda.com/mcp` to that agent as a remote (streamable HTTP)
+MCP server. Without it, the skills fall back to the Markdown version of each docs page (the page
+URL with `.md` in place of the trailing `/`).
+
 ### Keep the skills up to date
 
 The skills change as the products do. Claude Code doesn't auto-update plugins from this

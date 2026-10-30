@@ -2,10 +2,9 @@
 name: rpk-topic
 description: >-
   Manage Redpanda topics and produce or consume records from the CLI with the
-  `rpk topic` command group, including Tiered Storage, Cloud Topic, and Remote
-  Read Replica topic settings and Schema Registry encoding and decoding. Use
-  when creating, altering, trimming, or deleting topics, inspecting storage with
-  describe-storage, or producing and consuming records with rpk. For Cloud login
+  `rpk topic` command group, and look up topic settings in the Redpanda docs.
+  Use when creating, altering, trimming, or deleting topics, inspecting storage
+  with describe-storage, or producing and consuming records with rpk. For Cloud login
   and profile setup, see /redpanda:rpk-cloud, and for Schema Registry subjects
   and schemas, see /redpanda:rpk-registry.
 ---

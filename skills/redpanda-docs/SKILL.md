@@ -22,13 +22,24 @@ Ask if you can't tell from the conversation or the user's environment.
 
 ## 2. Ask the Docs MCP with that context
 
-The plugin installs the Redpanda Docs MCP server (`redpanda-docs`). For `ask_redpanda_question`:
+The Claude Code plugin installs the Redpanda Docs MCP server (`redpanda-docs`). In any other
+agent, add it yourself as a remote (streamable HTTP) MCP server at `https://docs.redpanda.com/mcp`,
+or use the Markdown pages (section 3).
+
+Use the direct lookups first when the question names a specific property or component:
+
+- `get_config_property` for one cluster, broker, or topic property (type, default, Cloud
+  support), and `list_config_properties` to find the right property name.
+- `get_connect_component` for one Redpanda Connect component and its fields, and
+  `list_connect_components` to find a component.
+- `search_api_reference` and `get_api_reference_content` for the Admin, HTTP Proxy, Schema
+  Registry, Control Plane, and Data Plane APIs.
+
+For everything else, use `ask_redpanda_question`:
 
 - Set `platform` to `cloud` or `self-managed`. Without it, answers mix both.
 - For self-managed Redpanda, set `version` to the user's release as the docs URLs spell it
   (major.minor, as in the cluster's version). Leave it unset, or use `current`, only for the latest release.
-- Use `search_api_reference` and `get_api_reference_content` for the Admin, HTTP Proxy, Schema
-  Registry, Control Plane, and Data Plane APIs.
 
 If the server says you've used up the anonymous limit, tell the user to run `/mcp` and sign in
 with a Redpanda Cloud account, and use the Markdown pages in the meantime.
@@ -49,6 +60,6 @@ Every docs page has a Markdown version: replace the trailing `/` or `.html` in i
 ## 4. Say where the answer came from
 
 Link the page you used. If the docs and the user's system disagree, trust the system, say so,
-and offer to report it with `submit_documentation_feedback`. Ask the user first: it needs a
-signed-in Redpanda Cloud account and sends their words, with that account, to the Redpanda docs
-team.
+and offer to report it with `give_feedback`. Ask the user first: it sends the report you write to
+the Redpanda docs team. Reports do not include the user's name or email, so keep credentials,
+tokens, and personal data out of the report.
