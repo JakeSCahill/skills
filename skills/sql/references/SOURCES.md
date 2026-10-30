@@ -35,8 +35,10 @@ the skill.
 
 - Grants survive when a user's SQL role is removed and reassigned (cloudv2 `user_sync_db.go`
   `opRevoke`, `repairExistingUser`).
-- The published reference does not say that `SELECT` on a view exposes every row the view
-  returns whatever the grantee's own topic grants.
+- The GRANT page says `SELECT` on a view needs no grant on the tables it reads, but does not
+  repeat the CREATE VIEW page's warning that the grantee reads everything the view returns.
+  (The fact is published on CREATE VIEW; the skill keeps only the behavior of checking before
+  granting.)
 - `sql-data-types/{timestamp-with-time-zone,bytea,uuid,array}.adoc` understate the engine's
   behavior (session time zone rendering, `bytea` comparisons, `uuid` compared with a string
   literal, the `GROUP BY` error on arrays).
