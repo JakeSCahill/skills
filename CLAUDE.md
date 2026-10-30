@@ -214,15 +214,18 @@ maintainer decision. When a sync routine finds a user-facing change, it updates 
 only if the procedure changed (see "HARD RULE: facts go in the docs, behavior goes in skills").
 
 **Adding a "How to work" line, or changing what one tells the agent to do.** The routines cannot
-run the evals, so:
+run the evals; CI or a maintainer does:
 
 1. A routine (or person) proposes the line together with a draft behavioral case in
    `evals/suites/<skill>.eval.json`, and adds the line, its source, and the case id to
    `SOURCES.md`. A proposal without a draft case is not made.
-2. The PR stays unmerged until a maintainer runs the case
+2. The PR stays unmerged until the case has run in the baseline, skill, and installed arms and
+   the baseline fails it while the skill arms pass. On a PR from a branch of this repository,
+   the Evals workflow (`.github/workflows/evals.yml`) runs the cases the change reaches and
+   fails the check when a "How to work" case breaks that rule. On a PR from a fork, which
+   cannot get the workflow's credentials, a maintainer runs the case
    (`node evals/run-evals.mjs --case <id> --arms baseline,skill,installed`, see
-   `evals/README.md`) and the baseline fails it while the skill arms pass. No CI job runs the
-   evals; the maintainer records the pass rates in the PR.
+   `evals/README.md`) and records the pass rates in the PR.
 3. If the baseline passes, the line is general knowledge: drop it, and keep the case only if
    it guards a real misroute.
 

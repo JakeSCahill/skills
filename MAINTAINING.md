@@ -1,7 +1,7 @@
 # Maintaining This Skills Repo
 
-CI checks only skill frontmatter and size (`.github/workflows/validate-skills.yml`); nothing runs
-the evals automatically. Skill accuracy is kept up over time by a **human + automation
+CI checks skill frontmatter and size (`.github/workflows/validate-skills.yml`) and runs the evals
+(`.github/workflows/evals.yml`; see "Thin skills and the evals"). Skill accuracy is kept up over time by a **human + automation
 process**: a fleet of scheduled agents ("routines") watch each product's source and open a PR
 when a user-facing change affects a skill, and a human reviews and merges. What counts as
 affecting a skill depends on its format: a **thin** skill (its `references/` holds only
@@ -115,18 +115,22 @@ as items for the docs, not claims to re-verify.
 ## Thin skills and the evals
 
 The evals in `evals/` (see `evals/README.md`) decide what a thin skill keeps. The routines cannot
-run them, so a maintainer does.
+run them. CI runs them on PRs from branches of this repository and in a weekly sweep; a
+maintainer runs them for PRs from forks, which cannot get the workflow's credentials.
 
 - **New "How to work" line.** A routine or person may propose one only together with a draft
   behavioral eval case in `evals/suites/<skill>.eval.json`, and the line, its source, and the
-  case id in `SOURCES.md`. The PR stays unmerged until a maintainer runs the case
-  (`node evals/run-evals.mjs --case <id> --arms baseline,skill,installed`) and the baseline
-  fails it while the skill arms pass. The maintainer records the pass rates in the PR. If the
-  baseline passes, the line comes out.
-- **Scheduled re-run.** "The baseline fails it" stops being true as models improve. Each month,
-  when the drift audit runs, a maintainer re-runs the behavioral cases of every thin skill
-  (`--arms baseline,installed`). A line whose case the baseline now passes is flagged for
-  removal in a PR; a line whose case the installed arm fails is a skill or docs problem to fix.
+  case id in `SOURCES.md`. The PR stays unmerged until the case has run in the baseline, skill,
+  and installed arms and the baseline fails it while the skill arms pass. On a PR from a branch
+  of this repository, the Evals workflow runs the cases the change reaches and fails the check
+  when a "How to work" case breaks that rule. On a PR from a fork, a maintainer runs the case
+  (`node evals/run-evals.mjs --case <id> --arms baseline,skill,installed`) and records the pass
+  rates in the PR. If the baseline passes, the line comes out.
+- **Weekly sweep.** "The baseline fails it" stops being true as models improve. Each week the
+  Evals workflow runs every suite in every arm and lists, in its job summary, each "How to work"
+  case whose baseline now passes and each one a skill arm fails. A maintainer reads the summary:
+  a line whose case the baseline now passes is flagged for removal in a PR; a line whose case
+  the installed arm fails is a skill or docs problem to fix.
 - **Converting a skill.** Convert one skill at a time, after its own evals show which of its
   facts the docs already cover. Every fact the skill drops that the docs lack is a docs gap,
   and the conversion waits until the docs cover it.
