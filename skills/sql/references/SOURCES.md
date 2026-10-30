@@ -1,8 +1,9 @@
 # Redpanda SQL (`sql`) Skill Source Map
 
 Scope gate: what a Redpanda Cloud user can do with the Redpanda SQL engine that Cloud runs.
-The thin `SKILL.md` restates nothing the published docs cover; it keeps procedures and the
-facts the docs lack or state wrongly. Each claim below maps to the source that confirms it.
+The skill is thin: it keeps only the "How to work" procedures below, each backed by a
+behavioral eval case in `evals/suites/sql.eval.json`, and sends the agent to the docs for
+everything else. This file maps only the claims the skill still makes.
 
 Engine claims are checked against `redpanda-data/oxla` at the release tag that the Cloud
 install pack pins (`vars.redpanda_oxla_version` in `redpanda-data/cloudv2`
@@ -10,39 +11,32 @@ install pack pins (`vars.redpanda_oxla_version` in `redpanda-data/cloudv2`
 against `redpanda-data/cloudv2` at the `redpanda_oxla_api_version` the same install pack pins.
 Read both private repos with the GitHub API; do not clone them.
 
-## Claim-to-source table
+## How to work: line, source, eval case
 
-| `SKILL.md` claim | Source |
+| How to work line | Source | Eval case |
+|---|---|---|
+| Find the table in its catalog: `catalog=>table`, `SHOW REDPANDA TABLES`, `DESCRIBE TABLE`, unqualified `SHOW TABLES` is an error; an unlisted topic is not mapped yet | cloud-docs `modules/reference/pages/sql/sql-statements/{show-tables,describe}.adoc` | `query-topic-table-through-catalog` |
+| Fix login access in Redpanda Cloud IAM, not with SQL: the `has_database_privilege(<user>, current_database(), 'CONNECT')` check, **Organization IAM > Roles**, and the user sync owning `CONNECT` and superuser for email-named users | cloud-docs `modules/sql/pages/manage/manage-access.adoc`; cloudv2 `apps/redpanda-oxla-api/internal/controller/user_sync_db.go` (`queryCurrentUsersSQL`, `queryCurrentOxlaUsersDB`, `buildUserOpSQL`), `reconcile_users.go` (`computeUserDiff`) | `lost-login-fixed-in-iam-not-grant-connect` |
+| Read the stored grants before any `REVOKE`: a pattern that matches no stored grant is an error; the two `information_schema` grant views; a catalog-wide grant appears only in `role_table_grants`; revoking it removes the per-topic grants | oxla `src/access_control/grant_revoke.cpp`, `src/metastore/information_schema_role_table_grants.cpp`, `src/metastore/information_schema_role_external_relation_grants.cpp`, `tests/blackbox/pit/kafka/test_redpanda_source_grants.py` (`test_revoke_metadata_grant_cascades_to_external_relation_grants`); cloud-docs `manage-access.adoc` | `narrow-wildcard-grant-by-reading-stored-grants` |
+| Before granting `SELECT` on a view, check what it exposes: a view runs with its owner's privileges; its definition is in `pg_views` (verified 2026-10-30) | cloud-docs `modules/reference/pages/sql/sql-statements/{create-view,grant}.adoc`, `modules/sql/pages/query-data/tables-and-views.adoc`, `modules/reference/pages/sql/system-catalogs/catalogs/pg_views.adoc` | `grant-on-view-exposes-what-it-returns` |
+
+## Other claims in SKILL.md
+
+| Claim | Source |
 |---|---|
-| `catalog=>table` references, `SHOW REDPANDA TABLES`, `DESCRIBE TABLE`, unqualified `SHOW TABLES` is an error | cloud-docs `modules/reference/pages/sql/sql-statements/{show-tables,describe}.adoc` |
-| Read-only engine; topics mapped through catalogs | cloud-docs `modules/reference/pages/sql/sql-statements/index.adoc` |
-| Login follows the IAM role; **Organization IAM > Roles** | cloud-docs `modules/sql/pages/manage/manage-access.adoc` |
-| `has_database_privilege(<user>, current_database(), 'CONNECT')` as the login check | cloudv2 `apps/redpanda-oxla-api/internal/controller/user_sync_db.go` (`queryCurrentUsersSQL`) |
-| User sync owns `CONNECT` and superuser for email-named users; revokes a manual grant for a user with no SQL role; never drops users; manages only names containing `@` that hold `CONNECT` | cloudv2 `apps/redpanda-oxla-api/internal/controller/user_sync_db.go` (`queryCurrentOxlaUsersDB`, `buildUserOpSQL`), `reconcile_users.go` (`computeUserDiff`) |
-| Role removal revokes only `CONNECT` and superuser; grants survive; re-assigning restores `CONNECT` on the existing user | cloudv2 `user_sync_db.go` (`opRevoke`, `applyCreateBatchWithRepair`, `repairExistingUser`) |
-| `GRANT SELECT ON EXTERNAL SOURCE`, `USAGE` on schema, Kafka ACLs do not apply | cloud-docs `modules/sql/pages/manage/manage-access.adoc` |
-| `REVOKE` with a pattern that matches no stored grant is an error | oxla `src/access_control/grant_revoke.cpp`; cloud-docs `manage-access.adoc` |
-| Catalog-wide grant listed in `information_schema.role_table_grants` (`table_name` = catalog) | oxla `src/metastore/information_schema_role_table_grants.cpp`, `src/metastore/information_schema_role_external_relation_grants.cpp` |
-| Revoking the catalog-wide grant removes per-topic grants | oxla `tests/blackbox/pit/kafka/test_redpanda_source_grants.py` (`test_revoke_metadata_grant_cascades_to_external_relation_grants`) |
-| `timestamp with time zone` rendered in the session time zone after `SET TIMEZONE` | oxla `tests/blackbox/pit/timestamps/test_set_timezone.py` |
-| `bytea` ordering operators, `IN`, `ORDER BY`, `GROUP BY`, `DISTINCT`, joins, `min`/`max`, `\|\|`, `substr`, `position` | oxla `tests/blackbox/pit/types/test_bytea.py` |
-| `uuid` column compares with a string literal | oxla `tests/blackbox/pit/operators/test_compare_uuid.py` (`test_uuid_column_compared_with_string_literal`), `tests/blackbox/pit/join/test_uuid_join.py` |
-| `GROUP BY` on an array: `could not identify an equality operator for type text[]` | oxla `tests/blackbox/pit/arrays/test_array_group_by.py` |
+| Read-only engine; topics mapped through catalogs; no `INSERT` or `COPY FROM` | cloud-docs `modules/reference/pages/sql/sql-statements/index.adoc` |
+| Connection details come from the **SQL** tab of **How to connect** | cloud-docs `modules/sql/pages/get-started/sql-quickstart.adoc`, `modules/sql/pages/connect-to-sql/authenticate.adoc` |
 | Docs URLs | served at https://docs.redpanda.com/cloud-data-platform/ from cloud-docs |
 
-## Known docs errors the skill corrects
+## Docs gaps reported (not skill claims; do not re-verify here)
 
-- `sql-data-types/timestamp-with-time-zone.adoc` says a `SELECT` ignores the session time zone
-  and returns values as stored.
-- `sql-data-types/bytea.adoc` lists only `=` and `<>` among comparisons.
-- `sql-data-types/uuid.adoc` says a `uuid` does not cast implicitly and filters with an explicit
-  cast; the cast works, but comparison with a string literal also works.
-- `sql-data-types/array.adoc` shows only the `ORDER BY` error for array keys.
+Found by the evals and handed to the docs team. They live in the docs once fixed, never in
+the skill.
 
-## Checked and left out
-
-- GCS through `AWS_CRED` with an `ENDPOINT` (HMAC keys): the docs show a `gs://` destination.
-  The engine picks the provider from the credential type, not the path scheme, so a `gs://`
-  path with `AWS_CRED` appears to reach the S3 client; the only test uses `s3://` (with
-  `COPY FROM`). Whether `s3://` is required for `COPY TO` is unconfirmed. TODO for human review.
-- `COPY TO` writes CSV only; the docs cover it, so the skill does not restate it.
+- Grants survive when a user's SQL role is removed and reassigned (cloudv2 `user_sync_db.go`
+  `opRevoke`, `repairExistingUser`).
+- The published reference does not say that `SELECT` on a view exposes every row the view
+  returns whatever the grantee's own topic grants.
+- `sql-data-types/{timestamp-with-time-zone,bytea,uuid,array}.adoc` understate the engine's
+  behavior (session time zone rendering, `bytea` comparisons, `uuid` compared with a string
+  literal, the `GROUP BY` error on arrays).

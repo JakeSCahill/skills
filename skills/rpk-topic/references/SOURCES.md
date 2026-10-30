@@ -1,40 +1,28 @@
 # rpk topic Skill Source Map
 
-Maps each claim kept in `skills/rpk-topic/SKILL.md` to the source it derives from, so syncs
-and human maintainers know where to re-verify it. The skill is in the thin format: it keeps
-only product-specific procedure, each backed by a behavioral eval case, and defers
-everything else to the docs.
+The skill is thin: it keeps only the "How to work" procedure below, backed by a behavioral
+eval case in `evals/suites/rpk-topic.eval.json`, and sends the agent to the docs for
+everything else. This file maps only the claims the skill still makes.
 
-The `rpk topic` command group and the broker validators live in the **private** repo
+The `rpk topic` command group lives in the **private** repo
 `redpanda-data/streaming-enterprise`. Read it with `gh api` or the Redpanda-Github-Read
 connector; do not clone it. Verify against the current stable release tag, not `dev`.
 Paths below are relative to that repo.
 
-## Claim-to-source table
+## How to work: line, source, eval case
 
-| SKILL.md claim | Source |
-|---|---|
-| How to work 1: `-r` on `alter-config` and `delete` anchors each expression with `^` and `$`; `rpk topic list -r` takes the same format for a preview | `src/go/rpk/pkg/cli/topic/config.go` and `delete.go` (`--regex`, `regexTopics`), `list.go` (`regexTopicDetails`), `utils.go`; anchoring in `src/go/rpk/pkg/rpkutil/regex_filter.go` (`RegexListedItems`, `CompileRegexExpressions`) |
-| How to work 2: parsed `%p` needs a non-negative `-p/--partition`, and the parsed value wins | `src/go/rpk/pkg/cli/topic/produce.go` (`partition >= 0` selects `kgo.ManualPartitioner()`; help text on `%p`) |
-| How to work 3: schema-context lookup through DescribeConfigs, exit on failure, `--schema-context ''` or `.` for the default context | `src/go/rpk/pkg/cli/topic/schema_context.go` (`schemaContextForTopic`, `effectiveSchemaContext`); `consume.go` (context resolver, `unable to determine schema context for topic`); `produce.go` (`resolveSchemaContext`) |
-| describe-storage unsupported on Redpanda Cloud | `src/go/rpk/pkg/cli/topic/describe_storage.go` (`config.CheckExitCloudAdmin`) |
+| How to work line | Source | Eval case |
+|---|---|---|
+| A parsed `%p` needs a non-negative `-p/--partition` as well, and the parsed value wins; without `-p` the default partitioner places records and rpk reports no error | `src/go/rpk/pkg/cli/topic/produce.go` (`partition >= 0` selects `kgo.ManualPartitioner()`; help text on `%p`) | `produce-parsed-partition-file` |
 
-Each "How to work" step has a behavioral case in `evals/suites/rpk-topic.eval.json`
-(`alter-config-regex-preview`, `produce-parsed-partition-file`,
-`consume-schema-context-bypass`). If the no-skill baseline starts passing one, the step is
-general knowledge and comes out.
+## Other claims in SKILL.md
 
-## Deferred to the docs or live introspection (not drift)
-
-Flags, defaults, percent-escape format tokens, offset syntax, topic property values, and
-Cloud limits are deliberately not in the skill. The agent looks them up in the docs or runs
-`rpk topic <subcommand> --help`. A sync must not copy them back in.
+| Claim | Source | Eval case |
+|---|---|---|
+| Get the cluster's version from `rpk version` (the "Redpanda Cluster" lines) before looking up topic behavior | `src/go/rpk/pkg/cli/version/versioncmd/versioncmd.go` (see `skills/redpanda-docs/references/SOURCES.md`) | none; a behavior with no case of its own (TODO below) |
+| `describe-storage` needs the Admin API, so it does not work on Redpanda Cloud | `src/go/rpk/pkg/cli/topic/describe_storage.go` (`config.CheckExitCloudAdmin`) | none |
 
 ## TODO / re-verify
 
-- `alter-config -r` and `delete -r` match against a topic list that includes internal
-  topics (`regexTopics` uses `ListTopicsWithInternal`), while `list -r` hides internal topics
-  and the `delete` help says it deletes only non-internal topics. For a broad expression
-  such as `'.*'` the preview may then not show everything the change touches; broker-side
-  `kafka_nodelete_topics` protects the default internal topics. The skill does not claim
-  either way; confirm with engineering before documenting it.
+- The version-first instruction is a behavior without a behavioral case in the suite. Add a
+  case that the baseline fails, or drop the instruction (maintainer decision).

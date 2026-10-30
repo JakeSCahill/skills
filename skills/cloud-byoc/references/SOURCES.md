@@ -1,49 +1,47 @@
 # cloud-byoc Skill Source Map
 
-Maps each claim in `skills/cloud-byoc/SKILL.md` to the source it was verified against, so
-syncs and maintainers know where to re-check it. Everything else the skill defers to the
-published docs.
+The skill is thin: it keeps only the "How to work" procedure below, backed by a behavioral
+eval case in `evals/suites/cloud-byoc.eval.json`, and sends the agent to the docs for
+everything else. This file maps only the claims the skill still makes.
 
-Both source repos are private. Read them through the GitHub API or the Redpanda-Github-Read
-MCP connector; do not clone them.
+The source repos for the intro claims are private. Read them through the GitHub API or the
+Redpanda-Github-Read MCP connector; do not clone them.
 
 - `redpanda-data/cloudv2`: paths below are relative to the repo root.
 - `redpanda-data/streaming-enterprise`: `rpk cloud byoc` lives in
   `src/go/rpk/pkg/cli/cloud/byoc/`.
 
-## Claim-to-source table
+## How to work: line, source, eval case
 
-All claims verified 2026-10-21.
+| How to work line | Source | Eval case |
+|---|---|---|
+| Create a BYOVNet cluster on Azure with Terraform alone: the BYOVNet module plus the Redpanda provider, which runs the agent bootstrap, with no Cloud API calls or `rpk cloud byoc azure apply` (verified 2026-10-27) | `redpanda-data/terraform-provider-redpanda` `redpanda/utils/byoc.go` (`RunByoc`, Azure preflight in `CheckCloudConfig`), `examples/byovpc/azure/main.tf`. Published: https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/byoc/azure/vnet-azure/ | `byovnet-azure-terraform-only` |
+| Confirm with the user before any change that deletes, scales, or reconfigures a cluster or its Network | General practice, no product source | none (TODO below) |
 
-| Claim in SKILL.md | Source |
+## Other claims in SKILL.md
+
+| Claim | Source |
 |---|---|
-| Create, update, and delete return a long-running operation; operation states `STATE_IN_PROGRESS`/`STATE_COMPLETED`/`STATE_FAILED` | cloudv2 `proto/public/cloud/redpanda/api/controlplane/v1/cluster.proto` (`UpdateCluster` returns `UpdateClusterOperation`, `patch: "/v1/clusters/{cluster.id}"`, `body: "cluster"`), `operation.proto` (`Operation.State`) |
-| Multi-zone broker count must be a multiple of the zone count | cloudv2 `apps/controlplane-api/internal/services/redpanda/redpanda_service.go` (`validateUserNodesCountZones`, `nodesCountNotZoneMultipleErr`: `INVALID_ARGUMENT`, "node count %d must be a multiple of the cluster's %d zones"; a single-zone cluster takes any count). Published: https://docs.redpanda.com/cloud-data-platform/manage/cluster-maintenance/scale-cluster/ |
-| Integer and number `custom_properties` values are sent as JSON strings | cloudv2 `cluster.proto`: the comment on `cluster_configuration` in `ClusterCreate`, `ClusterUpdate`, and `Cluster` ("Properties of type integer and number from redpanda config schema needs to be provided as strings to avoid precision loss"); `custom_properties` is a `google.protobuf.Struct` |
-| A tags PATCH may echo stored reserved keys unchanged; rejected only on an added or changed reserved key, with `INVALID_ARGUMENT` "cloud tags cannot contain the reserved key" | cloudv2 `apps/controlplane-api/internal/services/redpanda/redpanda_service.go` (`validateCloudTagKeysOnUpdate` delta check vs `validateCloudTagKeysOnCreate` presence check, `reservedTagKeyErr`, `reservedTagKeys`); `validate_test.go` (`TestValidateCloudTagKeysOnUpdate`) |
-| `RPK_CLOUD_SKIP_VERSION_CHECK=1` or `true` runs the installed plugin as is, only when one is already installed; rpk still loads a Cloud token first | streaming-enterprise `src/go/rpk/pkg/cli/cloud/byoc/install.go` (`ensurePluginVersion`: `pluginExists && (BYOCSkipVersionCheck == "1" \|\| == "true")`; `loginAndEnsurePluginVersion` calls `getTokenOrLogin` before it), `src/go/rpk/pkg/config/config.go` (`BYOCSkipVersionCheck` `env:"RPK_CLOUD_SKIP_VERSION_CHECK"`), `src/go/rpk/pkg/plugin/plugin.go` (`UserPaths`: managed plugin dir plus `$PATH`) |
-| `validate` needs no `--redpanda-id` and downloads the latest plugin; `apply` and `destroy` require `--redpanda-id` | streaming-enterprise `src/go/rpk/pkg/cli/cloud/byoc/byoc.go` (`isValidate` path, "required --redpanda-id flag cannot be empty" for apply/destroy), `install.go` (`fetchBYOCArtifact` `ListLatestArtifacts` when `isLatest`) |
-| BYOVNet on Azure is created with Terraform alone: the BYOVNet module plus the Redpanda provider, which runs the agent bootstrap, with no Cloud API calls or `rpk cloud byoc azure apply` (verified 2026-10-27; behavioral case `byovnet-azure-terraform-only`) | `redpanda-data/terraform-provider-redpanda` `redpanda/utils/byoc.go` (`RunByoc`, Azure preflight in `CheckCloudConfig`), `examples/byovpc/azure/main.tf`. Published: https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/byoc/azure/vnet-azure/ |
+| A BYOC cluster is a Control Plane API resource of type `TYPE_BYOC` on a Network resource, plus an agent that `rpk cloud byoc <aws\|gcp\|azure>` installs with Terraform | cloudv2 `proto/public/cloud/redpanda/api/controlplane/v1/cluster.proto` (`Cluster.Type`); streaming-enterprise `src/go/rpk/pkg/cli/cloud/byoc/` (`byoc.go`, `install.go`) |
+| Create, update, and delete return a long-running operation; poll `GET /v1/operations/{id}` until `STATE_COMPLETED` or `STATE_FAILED` | cloudv2 `proto/public/cloud/redpanda/api/controlplane/v1/cluster.proto` (`UpdateCluster` returns `UpdateClusterOperation`, `patch: "/v1/clusters/{cluster.id}"`, `body: "cluster"`), `operation.proto` (`Operation.State`) |
+| Docs URLs | served at https://docs.redpanda.com/cloud-data-platform/ |
 
-## Dropped after behavioral screening
+## Docs gaps reported (not skill claims; do not re-verify here)
 
-These procedures were drafted for "How to work" and removed because a model with no skill
-already followed them in a mocked run (2026-10-21). They remain true and are covered by the
-published docs:
+Found by the evals and handed to the docs team:
 
-- Teardown order: `DELETE /v1/clusters/{id}`, wait for `STATE_DELETING_AGENT`, then
-  `rpk cloud byoc <provider> destroy`, then delete the network (cloudv2
-  `redpanda_service.go` `validTransitions`; published in the BYOC Control Plane API page).
-- Read-modify-write for `cloud_provider_tags`, because a masked update replaces the whole map
-  (cloudv2 `redpanda_service.go`, comment on `restoreRedpandaManagedTag`).
-- Do not re-send a scaling PATCH while a paused scale leaves the cluster in
-  `STATE_UPGRADING`; Redpanda Support resumes or rolls back (published scale-cluster page).
+- `custom_properties` integer and number values are sent as JSON strings (cloudv2
+  `cluster.proto`, comment on `cluster_configuration`).
+- A tags PATCH may echo stored reserved keys unchanged (cloudv2 `redpanda_service.go`,
+  `validateCloudTagKeysOnUpdate`); the published reserved-keys section says they are rejected.
+- `redpanda_cloud_provider_tags` is not backfilled and can be empty on older clusters while
+  `cloud_provider_tags` carries `redpanda-managed` (cloudv2
+  `apps/public-api-go/internal/services/cluster/v1/mapper.go`); the API reference does not say so.
+- `rpk cloud byoc <provider> validate` runs without `--redpanda-id`, and
+  `RPK_CLOUD_SKIP_VERSION_CHECK` runs the installed plugin as is (streaming-enterprise
+  `src/go/rpk/pkg/cli/cloud/byoc/byoc.go`, `install.go`).
 
-## TODO / unresolved (do not state in the skill until confirmed)
+## TODO / re-verify
 
-- Whether `update_mask` is required on every cluster PATCH. The published examples omit it,
-  and the gateway may derive a mask from the body. Settle with one live call.
-- Whether `rpk cloud byoc azure destroy` needs `--subscription-id`. The published delete
-  example omits it; the plugin's own flags are not in the rpk source.
-- The error code returned for a tier not offered in a region.
-- Whether `ListClusters` returns `dataplane_api.url`.
+- The confirm-before-change line has no behavioral case. Add one the baseline fails, or fold
+  it into the docs pointer (maintainer decision).
