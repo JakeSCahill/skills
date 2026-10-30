@@ -29,10 +29,9 @@ partitioner puts them and rpk reports no error.
 Look up flags, defaults, format tokens, offset syntax, topic properties, and
 procedures in the Redpanda docs instead of from memory:
 
-- Follow `/redpanda:redpanda-docs`. Self-managed topic behavior changes between
-  releases, so first get the cluster's version from `rpk version` (the "Redpanda
-  Cluster" lines, not the rpk version), then pass `platform` and `version` to
-  `ask_redpanda_question`, or read the `/streaming/<version>/` pages.
+- Follow `/redpanda:redpanda-docs`. Use `get_config_property` for one topic
+  property and `list_config_properties` to find a property's name, and
+  `ask_redpanda_question` for everything else.
 - Most useful pages: the rpk topic reference at
   https://docs.redpanda.com/streaming/current/reference/rpk/rpk-topic/rpk-topic/ (one
   page per subcommand) and the topic properties reference at

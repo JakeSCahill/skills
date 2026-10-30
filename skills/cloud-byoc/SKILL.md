@@ -25,16 +25,14 @@ the Redpanda Terraform provider in one configuration, as in
 https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/byoc/azure/vnet-azure/.
 Do not call the Cloud API or run `rpk cloud byoc azure apply` to create it.
 
-Otherwise follow `/redpanda:redpanda-docs`, and confirm with the user before any change that
-deletes, scales, or reconfigures a cluster or its Network.
-
 ## Use the docs for everything else
 
 Look up request bodies, field names, flags, network and connectivity setup, tier names,
 error codes, and per-provider steps in the Redpanda docs, following `/redpanda:redpanda-docs`.
 Pass `platform: "cloud"` to `ask_redpanda_question` so self-managed answers are left out, and
 use `search_api_reference` and `get_api_reference_content` for Control Plane API endpoints and
-schemas.
+schemas. For a cluster property, `get_config_property` with `platform: "cloud"` says whether it is
+supported or editable in Redpanda Cloud.
 
 Start with:
 

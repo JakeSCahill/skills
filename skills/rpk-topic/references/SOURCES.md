@@ -19,10 +19,14 @@ Paths below are relative to that repo.
 
 | Claim | Source | Eval case |
 |---|---|---|
-| Get the cluster's version from `rpk version` (the "Redpanda Cluster" lines) before looking up topic behavior | `src/go/rpk/pkg/cli/version/versioncmd/versioncmd.go` (see `skills/redpanda-docs/references/SOURCES.md`) | none; a behavior with no case of its own (TODO below) |
+| `get_config_property` looks up one topic property and `list_config_properties` finds a property's name | Live `tools/list` from `https://docs.redpanda.com/mcp` (checked 2026-10-30; see `skills/redpanda-docs/references/SOURCES.md`) | none |
 | `describe-storage` needs the Admin API, so it does not work on Redpanda Cloud | `src/go/rpk/pkg/cli/topic/describe_storage.go` (`config.CheckExitCloudAdmin`) | none |
 
-## TODO / re-verify
+## Lines removed for lack of a failing baseline
 
-- The version-first instruction is a behavior without a behavioral case in the suite. Add a
-  case that the baseline fails, or drop the instruction (maintainer decision).
+- "First get the cluster's version from `rpk version` (the Redpanda Cluster lines, not the rpk
+  version) before looking up topic behavior" was removed on 2026-10-30. Its behavioral case (a
+  request for the topic properties reference that applies to a cluster whose brokers run an
+  older release than both the rpk client and the latest docs) passed 3/3 in the baseline:
+  without the skill, the agent ran `rpk version` and linked the brokers' release. Finding the
+  version is covered by `/redpanda:redpanda-docs`, so the case was not kept.
