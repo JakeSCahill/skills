@@ -54,8 +54,8 @@ combination at startup.
 ## Use the docs for everything else
 
 For config fields, defaults, metadata keys, signal table columns, PostgreSQL setup, and cloud
-provider steps, query the Redpanda Docs MCP server (`redpanda-docs`: `ask_redpanda_question`,
-`search_api_reference`, `get_api_reference_content`). If it is not available, fetch the Markdown
-twin of the page:
+provider steps, follow `/redpanda:redpanda-docs`. Use `get_connect_component` for `postgres_cdc`
+and its fields, and `ask_redpanda_question` for setup and procedures. If the Docs MCP server is not
+available, fetch the Markdown twin of the page:
 
 - https://docs.redpanda.com/connect/components/inputs/postgres_cdc.md

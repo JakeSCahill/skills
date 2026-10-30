@@ -28,6 +28,7 @@ https://docs.redpanda.com/connect/components/inputs/postgres_cdc/. Read source w
 |---|---|
 | Enterprise connector, license required | `internal/impl/postgresql/input_pg_stream.go` (imports `internal/license`; file is under the Redpanda Community License) |
 | `pg_stream` is the deprecated former name (frontmatter description) | `input_pg_stream.go` (`MustRegisterBatchInput("pg_stream", ...).Deprecated()`) |
+| `get_connect_component` looks up `postgres_cdc` and its fields | Live `tools/list` from `https://docs.redpanda.com/mcp` (checked 2026-10-30; see `skills/redpanda-docs/references/SOURCES.md`) |
 
 ## Docs gaps reported (not skill claims; do not re-verify here)
 
