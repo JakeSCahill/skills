@@ -60,6 +60,13 @@ topics that exist now, so topics created later that match the wildcard are no lo
 and the user has no access to any covered topic between the `REVOKE` and the `GRANT`s. Run them
 together. Revoking the catalog-wide grant also removes every per-topic grant on that catalog.
 
+**Before granting `SELECT` on a view, check what it exposes.** A view runs its query with its
+owner's privileges, so a role with `SELECT` on the view reads everything the view returns,
+whatever its own topic grants. Read the view's definition from `pg_views` and compare the tables
+it reads with the grantee's stored grants. If the grant would let the user read data they cannot
+read today, tell the user what it exposes and get their confirmation first, or offer a view that
+reads only what they can already see.
+
 ## Use the docs for everything else
 
 Look up connection strings and authentication modes, driver settings, statement and function
