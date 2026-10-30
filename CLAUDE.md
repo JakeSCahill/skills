@@ -19,6 +19,37 @@ demand) plus `references/` files, grounded in Redpanda's own source code, docs, 
 - `MAINTAINING.md` — the verification norms and the proposed sync automation.
 - `skills-sync-routine.md` — the scheduled-routine definitions.
 
+## HARD RULE: facts go in the docs, behavior goes in skills
+
+A skill tells an agent **how to work**. It does not restate **what is true** about a
+product. Users and agents both read the Redpanda docs, so a fact belongs there, where
+everyone gets it, and an agent reaches it through the Redpanda Docs MCP server.
+
+**Facts go in the docs:** config fields and properties, CLI flags and commands, defaults,
+limits, syntax, API fields and endpoints, error messages, feature behavior, and the steps of
+a documented procedure.
+
+**Behavioral guidance goes in skills:** what an agent should do in a specific agentic
+scenario, the order to check things in, when to stop and ask the user a follow-up question,
+what to confirm before a destructive or irreversible step, when to escalate to a person,
+how to use memory and what is worth remembering, and the decision rules and traps an agent
+gets wrong without the skill.
+
+Rules for every change, by routines and people alike:
+
+1. **Never add a new fact to any skill.** When a user-facing change ships, update a skill
+   only if what an agent should *do* changed. If the change is a new or changed fact, make
+   no skill change.
+2. **A fact missing from the docs is a docs gap, not a skill change.** Report it (routines:
+   in the private provenance report) so the docs are fixed. Do not work around it in a skill.
+3. **Existing facts in a skill that is not yet thin may be corrected** when they drift, so
+   the skill does not tell agents something false. Prefer replacing a drifted fact with a
+   pointer to the docs page that states it.
+4. **A thin skill never gains facts or reference files.** A skill whose `references/` holds
+   only `SOURCES.md` is thin (see "Skill format: thin skills"). Never add facts to it and
+   never recreate a deleted reference file, even when `SOURCES.md` still maps a claim the
+   skill no longer makes.
+
 ## HARD RULE: the durability principle
 
 **Stable concepts live in the skill; volatile specifics do NOT.** A skill documents the
@@ -156,7 +187,8 @@ and `references/` holds only `SOURCES.md`. A behavioral case counts only if it g
 its mocks answer every legitimate command, and the baseline still fails it. If no procedure for a
 product survives that test, the skill carries none and points at the docs; whether to keep such
 a skill at all is a maintainer decision. When a sync routine finds a user-facing change, it updates "How to
-work" only if the procedure changed.
+work" only if the procedure changed (see "HARD RULE: facts go in the docs, behavior goes in
+skills").
 
 ## Maturity and PREVIEW markers
 
